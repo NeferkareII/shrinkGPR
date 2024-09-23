@@ -1,4 +1,4 @@
-# Function that returns pvalue for simple linear regression
+# Function that returns p-value for simple linear regression
 lightweight_ols <- function(y, x) {
   ym <- mean(y)
   xm <- mean(x)
@@ -18,6 +18,8 @@ lightweight_ols <- function(y, x) {
 }
 
 # Robust cholesky decomposition using torch
+# Function currently only works for batched matrices
+# If to be used for single matrices, do torch_unsqueeze(A, 1) before calling the function
 robust_chol <- function(A, tol = 1e-6, upper = FALSE) {
   tryCatch(L <- linalg_cholesky(A), error = function(e) {
     # First fallback - jittering

@@ -78,14 +78,14 @@ sylvester <- nn_module(
     # Orthogonalize q via Householder reflections
     norm <- torch_norm(self$Q, p = 2, dim = 2)
     v <- torch_div(self$Q$t(), norm)
-    hh <- self$eye - 2 * torch_matmul(torch_unsqueeze(v[,1], 2), torch_unsqueeze(v[,1], 2)$t())
+    hh <- self$eye - 2 * torch_matmul(v[,1]$unsqueeze(2), v[,1]$unsqueeze(2)$t())
 
     for (i in 2:self$n_householder) {
-      hh <- torch_matmul(hh, self$eye - 2 * torch_matmul(torch_unsqueeze(v[,i], 2), torch_unsqueeze(v[,i], 2)$t()))
+      hh <- torch_matmul(hh, self$eye - 2 * torch_matmul(v[,i]$unsqueeze(2), v[,i]$unsqueeze(2)$t()))
     }
 
     # Compute QR1 and QR2
-    rqzb <- torch_matmul(r2, torch_matmul(hh$t(), zk$t())) + torch_unsqueeze(self$b, 2)
+    rqzb <- torch_matmul(r2, torch_matmul(hh$t(), zk$t())) + self$b$unsqueeze(2)
     z <- zk + torch_matmul(hh, torch_matmul(r1, self$h(rqzb)))$t()
 
     # Compute log|det J|
@@ -100,8 +100,3 @@ sylvester <- nn_module(
 
   }
 )
-
-test <- sylvester(5, 3)
-zk <- torch_randn(10, 5, device = torch_device("cuda"))
-
-test$forward(zk)
