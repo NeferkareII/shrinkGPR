@@ -1,8 +1,9 @@
 # This implements Sylvester normalizing flows, as described by
 # van den Berg (2018) in "Sylvester Normalizing Flows for Variational Inference".
+#' @export
 sylvester <- nn_module(
   classname = "Sylvester",
-  initialize = function(d, n_householder, device) {
+  initialize = function(d, n_householder = min(d, 10), device) {
 
     if (missing(device)) {
       if (cuda_is_available()) {
@@ -10,6 +11,8 @@ sylvester <- nn_module(
       } else {
         self$device <- torch_device("cpu")
       }
+    } else {
+      self$device <- device
     }
 
     self$d <- d
@@ -40,7 +43,7 @@ sylvester <- nn_module(
                                        device = self$device), diagonal = 1)$requires_grad_(FALSE)
     # For some reason, torch_arange goes from a to b if dtype is not specified
     # but from a to b - 1 if dtype is set to torch_long()
-    diag_idx <- torch_arange(1, self$d + 1, dtype = torch_long(),
+    diag_idx <- torch_arange(1, self$d, dtype = torch_long(),
                              device = self$device)$requires_grad_(FALSE)
     identity <- torch_eye(self$d, self$d,
                           device = self$device)$requires_grad_(FALSE)
@@ -96,7 +99,7 @@ sylvester <- nn_module(
 
     log_diag_j = diag_j$abs()$log()$sum(2)
 
-    return(list(z = z, log_diag_j = log_diag_j))
+    return(list(zk = z, log_diag_j = log_diag_j))
 
   }
 )

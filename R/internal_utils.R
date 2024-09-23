@@ -21,36 +21,51 @@ lightweight_ols <- function(y, x) {
 # Function currently only works for batched matrices
 # If to be used for single matrices, do torch_unsqueeze(A, 1) before calling the function
 robust_chol <- function(A, tol = 1e-6, upper = FALSE) {
-  tryCatch(L <- linalg_cholesky(A), error = function(e) {
+
+  Lower <- linalg_cholesky_ex(A)
+
+  if (Lower$info$any()$item()) {
     # First fallback - jittering
     jitter <- tol
     sucess <- FALSE
     while (!sucess & jitter < 1) {
-      tryCatch(L <- linalg_cholesky(A + jitter * torch_eye(A$size(1))), error = function(e) {
+      Lower <- linalg_cholesky_ex(A + jitter * torch_eye(A$size(2)))
+
+      if (!Lower$info$any()$item()) {
+        sucess <- TRUE
+      } else {
         jitter <- jitter * 10
-      })
-      sucess <- TRUE
+      }
     }
+  }
 
-    if (jitter >= 1) {
-      # If jittering fails, fall back on eigen decomposition - very expensive to evaluate!
-      # Eigenvalue decomposition
-      eigen_result <- linalg_eigh(A)
-      evals <- eigen_result[[1]]
-      evecs <- eigen_result[[2]]
+  if (Lower$info$any()$item()) {
+    # Second fallback - eigen decomposition
+    eigen_result <- linalg_eigh(A)
+    evals <- eigen_result[[1]]
+    evecs <- eigen_result[[2]]
 
-      evals[evals < tol] <- tol
+    evals[evals < tol] <- tol
 
-      # Reconstruct A_star
-      A_star <- torch_bmm(
-        torch_bmm(evecs, torch_diag_embed(evals, dim1 = -2, dim2 = -1)),
-        evecs$permute(c(1, 3, 2))
-      )
+    # Reconstruct A_star
+    A_star <- torch_bmm(
+      torch_bmm(evecs, torch_diag_embed(evals, dim1 = -2, dim2 = -1)),
+      evecs$permute(c(1, 3, 2))
+    )
 
-      # Cholesky decomposition
-      L <- linalg_cholesky(A_star)
-    }
-  })
+    # Cholesky decomposition
+    Lower <- linalg_cholesky_ex(A_star)
+  }
 
-  return(L)
+  # Give up and crawl into a hole
+  if (Lower$info$any()$item()) {
+    stop("Cholesky decomposition failed")
+  }
+
+
+  if (upper) {
+    return(Lower$L$permute(1, 3, 2))
+  } else {
+    return(Lower$L)
+  }
 }

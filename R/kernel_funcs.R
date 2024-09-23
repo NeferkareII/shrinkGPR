@@ -18,21 +18,25 @@ sqdist <- function(x, l2, x_star = NULL) {
   return(sqdist)
 }
 
+#' @export
 kernel_se <- function(l2, lam, x, x_star = NULL) {
   sqdist_x <- sqdist(x, l2, x_star)
   K <- 1/(lam$unsqueeze(2)$unsqueeze(2)) * torch_exp(-0.5 * sqdist_x)
 }
 
+#' @export
 kernel_matern_12 <- function(l2, lam, x, x_star = NULL) {
   sqdist <- torch_sqrt(sqdist(x, l2, x_star) + 1e-4)
   K <- 1/(lam$unsqueeze(2)$unsqueeze(2)) * torch_exp(-sqdist)
 }
 
+#' @export
 kernel_matern_32 <- function(l2, lam, x, x_star = NULL) {
   sqdist <- torch_sqrt(sqdist(x, l2, x_star) + 1e-4)
   K <- 1/(lam$unsqueeze(2)$unsqueeze(2)) * (1 + sqrt(3) * sqdist) * torch_exp(-sqrt(3) * sqdist)
 }
 
+#' @export
 kernel_matern_52 <- function(l2, lam, x, x_star = NULL) {
   sqdist <- torch_sqrt(sqdist(x, l2, x_star) + 1e-4)
   K <- 1/(lam$unsqueeze(2)$unsqueeze(2)) * (1 + sqrt(5) * sqdist + 5/3 * sqdist^2) * torch_exp(-sqrt(5) * sqdist)
