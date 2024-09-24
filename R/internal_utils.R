@@ -70,6 +70,7 @@ robust_chol <- function(A, tol = 1e-6, upper = FALSE) {
   }
 }
 
+# Prevents values from being too close to zero
 res_protector_autograd = autograd_function(
   forward = function(ctx, x) {
     result = torch_where(torch_abs(x) < 1e-10,
@@ -80,5 +81,33 @@ res_protector_autograd = autograd_function(
     return(grad_output)
   }
 )
+
+# Merges user and default values of named list inputs
+list_merger <- function(default, user) {
+
+  # Check that user and sv_param are a list
+  if (is.list(user) == FALSE | is.data.frame(user)){
+    stop(paste0(deparse(substitute(user)), " has to be a list"))
+  }
+
+  stand_nam <- names(default)
+  user_nam <- names(user)
+
+  # Give out warning if an element of the parameter list is misnamed
+  if (any(!user_nam %in% stand_nam)){
+    wrong_nam <- user_nam[!user_nam %in% stand_nam]
+    warning(paste0(paste(wrong_nam, collapse = ", "),
+                   ifelse(length(wrong_nam) == 1, " has", " have"),
+                   " been incorrectly named in ", deparse(substitute(user)), " and will be ignored"),
+            immediate. = TRUE)
+  }
+
+  # Merge users' and default values and ignore all misnamed values
+  missing_param <- stand_nam[!stand_nam %in% user_nam]
+  user[missing_param] <- default[missing_param]
+  user <- user[stand_nam]
+
+  return(user)
+}
 
 
