@@ -69,3 +69,16 @@ robust_chol <- function(A, tol = 1e-6, upper = FALSE) {
     return(Lower$L)
   }
 }
+
+res_protector_autograd = autograd_function(
+  forward = function(ctx, x) {
+    result = torch_where(torch_abs(x) < 1e-10,
+                         torch_sign(x) * 1e-10, x)
+    return(result)
+  },
+  backward = function(ctx, grad_output) {
+    return(grad_output)
+  }
+)
+
+

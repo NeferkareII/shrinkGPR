@@ -197,5 +197,118 @@ GPR_class <- nn_module(
     }
 
     return(elbo)
+  },
+
+  # Method to calculate moments of predictive distribution
+  calc_pred_moments = function(x_new, nsamp, x_mean_new) {
+
+    with_no_grad({
+      N_new = x_new$shape[1]
+
+      # First, generate posterior draws by drawing random samples from the variational distribution.
+      z <- self$gen_batch(nsamp)
+      zk_pos <- self$forward(z)$zk
+      zk_pos <- res_protector_autograd(zk_pos)
+
+      l2_zk <- zk_pos[, 1:self$x$shape[2]]
+      sigma_zk <- zk_pos[, (self$x$shape[2] + 1)]
+      lam_zk <- zk_pos[, (self$x$shape[2] + 2)]
+
+      if (!self$mean_zero) {
+        beta <- zk_pos[, (self$x$shape[2] + 3):(self$x$shape[2] + 2 + self$x_mean$shape[2])]
+        lam_mean <- zk_pos[, -1]
+      } else {
+        beta <- NULL
+      }
+
+      # Calculate covariance matrix K and transform into L and alpha
+      # L is the cholseky decomposition of K + sigma^2I, i.e. the covariance matrix of the GP
+      # alpha is the solution to L L^T alpha = y, i.e. (K + sigma^2I)^{-1}y
+
+      K <- self$kernel_func(l2_zk, lam_zk, self$x)
+      single_eye <- torch_eye(self$N, device = self$device)
+      batch_sigma2 <- single_eye$`repeat`(c(nsamp, 1, 1)) *
+        sigma_zk$unsqueeze(2)$unsqueeze(2)
+      L <- robust_chol(K + batch_sigma2, upper = FALSE)
+
+      if (self$mean_zero) {
+        alpha <- torch_cholesky_solve(self$y, L, upper = FALSE)
+      } else {
+        y_demean <- (self$y - torch_matmul(self$x_mean, beta$t()))$t()$unsqueeze(3)
+        alpha <- torch_cholesky_solve(y_demean, L, upper = FALSE)
+      }
+
+      # Calculate K_star_star, the covariance between the test data
+      K_star_star <- self$kernel_func(l2_zk, lam_zk, x_new)
+
+      # Calculate K_star, the covariance between the training and test data
+      K_star_t <- self$kernel_func(l2_zk, lam_zk, self$x, x_new)
+
+      # Calculate the predictive mean and variance
+      if (self$mean_zero) {
+        pred_mean <- torch_bmm(K_star_t, alpha)$squeeze()
+      } else {
+        pred_mean <- torch_bmm(K_star_t, alpha)$squeeze() +
+          torch_matmul(x_mean_new, beta$t())$t()$squeeze()
+      }
+
+      sigle_eye_new <- torch_eye(N_new, device = self$device)
+      batch_sigma2_new <- sigle_eye_new$`repeat`(c(nsamp, 1, 1)) *
+        sigma_zk$unsqueeze(2)$unsqueeze(2)
+      v <- linalg_solve_triangular(L, K_star_t$permute(c(1, 3, 2)), upper = FALSE)
+      pred_var <- K_star_star - torch_matmul(v$permute(c(1, 3, 2)), v) + batch_sigma2_new
+
+      return(list(pred_mean = pred_mean, pred_var = pred_var))
+    })
+  },
+
+  predict = function(x_new, nsamp, x_mean_new) {
+
+    with_no_grad({
+      N_new <- x_new$shape[1]
+
+      # Calculate the moments of the predictive distribution
+      pred_moments <- self$calc_pred_moments(x_new, nsamp, x_mean_new)
+      pred_mean <- pred_moments$pred_mean
+      pred_var <- pred_moments$pred_var
+
+      pred_var_chol <- robust_chol(pred_var, upper = FALSE)
+      eps <- torch_randn(nsamp, N_new, 1, device = self$device)
+
+      pred_samples <- pred_mean$unsqueeze(1) + torch_bmm(pred_var_chol, eps)$squeeze()
+
+      return(pred_samples$squeeze())
+    })
+
+  },
+
+  # Method to evaluate predictive density
+  eval_pred_dens = function(x_new, y_new, nsamp, x_mean_new = NULL, log = FALSE) {
+
+    with_no_grad({
+      pred_moments <- test$calc_pred_moments(x_new, nsamp, x_mean_new)
+      pred_mean <- pred_moments$pred_mean
+      pred_var <- pred_moments$pred_var$squeeze()
+
+      ldnorm <- distr_normal(pred_mean, torch_sqrt(pred_var))
+
+      log_dens <- ldnorm$log_prob(y_new$unsqueeze(2))$t()
+      max <- torch_max(log_dens, dim = 1)
+      res <- -torch_log(torch_tensor(nsamp, device = test$device)) + max[[1]] + torch_log(torch_sum(torch_exp(log_dens - max[[1]]$unsqueeze(1)), dim = 1))
+
+      if (!log) {
+        res <- torch_exp(res)
+      }
+
+      return(res)
+    })
+
+  },
+
+  # Method to calculate LPDS
+  LPDS = function(x_new, y_new, nsamp, x_mean_new = NULL) {
+    res <- self$eval_pred_dens(x_new, y_new, nsamp, x_mean_new, log = TRUE)
+    return(res)
   }
+
 )
