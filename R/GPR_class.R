@@ -38,7 +38,7 @@ GPR_class <- nn_module(
     self$beta_sp <- 0.7
     self$softplus <- nn_softplus(beta = self$beta_sp, threshold = 20)
 
-    flow_args <- c(d = self$d, device = self$device, flow_args)
+    flow_args <- c(d = self$d, flow_args)
 
     # Add flow parameters
     self$n_layers <- n_layers
@@ -47,6 +47,8 @@ GPR_class <- nn_module(
     for (i in 1:n_layers) {
       self$layers$append(do.call(flow_func, flow_args))
     }
+
+    self$layers$to(device = self$device)
 
     # Create forward method
     self$model <- nn_sequential(self$layers)

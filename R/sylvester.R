@@ -3,17 +3,7 @@
 #' @export
 sylvester <- nn_module(
   classname = "Sylvester",
-  initialize = function(d, n_householder = min(d, 10), device) {
-
-    if (missing(device)) {
-      if (cuda_is_available()) {
-        self$device <- torch_device("cuda")
-      } else {
-        self$device <- torch_device("cpu")
-      }
-    } else {
-      self$device <- device
-    }
+  initialize = function(d, n_householder = min(d, 10)) {
 
     self$d <- d
     self$n_householder <- n_householder
@@ -23,30 +13,21 @@ sylvester <- nn_module(
     self$diag_activation <- torch_tanh
 
     reg <- 1/sqrt(self$d)
-    self$R1 <- nn_parameter(torch_zeros(self$d, self$d,
-                                        device = self$device)$uniform_(-reg, reg))
-    self$R2 <- nn_parameter(torch_zeros(self$d, self$d,
-                                        device = self$device)$uniform_(-reg, reg))
+    self$R1 <- nn_parameter(torch_zeros(self$d, self$d)$uniform_(-reg, reg))
+    self$R2 <- nn_parameter(torch_zeros(self$d, self$d)$uniform_(-reg, reg))
 
-    self$diag1 <- nn_parameter(torch_zeros(self$d,
-                                           device = self$device)$uniform_(-reg, reg))
-    self$diag2 <- nn_parameter(torch_zeros(self$d,
-                                           device = self$device)$uniform_(-reg, reg))
+    self$diag1 <- nn_parameter(torch_zeros(self$d)$uniform_(-reg, reg))
+    self$diag2 <- nn_parameter(torch_zeros(self$d)$uniform_(-reg, reg))
 
-    self$Q <- nn_parameter(torch_zeros(self$n_householder, self$d,
-                                       device = self$device)$uniform_(-reg, reg))
+    self$Q <- nn_parameter(torch_zeros(self$n_householder, self$d)$uniform_(-reg, reg))
 
-    self$b <- nn_parameter(torch_zeros(self$d,
-                                       device = self$device)$uniform_(-reg, reg))
+    self$b <- nn_parameter(torch_zeros(self$d)$uniform_(-reg, reg))
 
-    triu_mask <- torch_triu(torch_ones(self$d, self$d,
-                                       device = self$device), diagonal = 1)$requires_grad_(FALSE)
+    triu_mask <- torch_triu(torch_ones(self$d, self$d), diagonal = 1)$requires_grad_(FALSE)
     # For some reason, torch_arange goes from a to b if dtype is not specified
     # but from a to b - 1 if dtype is set to torch_long()
-    diag_idx <- torch_arange(1, self$d, dtype = torch_long(),
-                             device = self$device)$requires_grad_(FALSE)
-    identity <- torch_eye(self$d, self$d,
-                          device = self$device)$requires_grad_(FALSE)
+    diag_idx <- torch_arange(1, self$d, dtype = torch_long())$requires_grad_(FALSE)
+    identity <- torch_eye(self$d, self$d)$requires_grad_(FALSE)
 
     self$triu_mask <- nn_buffer(triu_mask)
     self$diag_idx <- nn_buffer(diag_idx)
