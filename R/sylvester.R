@@ -3,7 +3,12 @@
 #' @export
 sylvester <- nn_module(
   classname = "Sylvester",
-  initialize = function(d, n_householder = min(d, 10)) {
+  initialize = function(d, n_householder) {
+
+
+    if (missing(n_householder)) {
+      n_householder <- min(d, 10)
+    }
 
     self$d <- d
     self$n_householder <- n_householder

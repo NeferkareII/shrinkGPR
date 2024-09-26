@@ -13,8 +13,9 @@ GPR_class <- nn_module(
 
     self$d <- ncol(x) + 2
     self$mean_zero <- TRUE
-    if (!missing(x_mean)) {
-      self$d <- self$d + ncol(x_mean)
+    if (!missing(x_mean) & !is.null(x_mean)) {
+      # +1 for global shrinkage parameter
+      self$d <- self$d + ncol(x_mean) + 1
       self$mean_zero <- FALSE
     }
 
@@ -143,7 +144,10 @@ GPR_class <- nn_module(
       log_det_J <- log_det_J + self$beta_sp * (zk[, -1] - self$softplus(zk[, -1]))
       lam_mean <- self$softplus(zk[, -1])
 
-      zk <- torch_cat(list(l2_sigma_lam, zk[, (self$x$shape[2] + 2):(self$x$shape[2] + 2 + self$x_mean$shape[2])], lam_mean$unsqueeze(2)), dim = 2)
+      zk <- torch_cat(list(l2_sigma_lam,
+                           zk[, (self$x$shape[2] + 3):(self$x$shape[2] + self$x_mean$shape[2] + 2)],
+                           lam_mean$unsqueeze(2)),
+                      dim = 2)
     }
 
     return(list(zk = zk, log_det_J = log_det_J))
