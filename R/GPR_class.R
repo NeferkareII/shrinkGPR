@@ -1,5 +1,4 @@
 # Create nn_module subclass that implements forward methods for GPR
-#' @export
 GPR_class <- nn_module(
   classname = "GPR",
   initialize = function(y, x, x_mean,
@@ -72,14 +71,14 @@ GPR_class <- nn_module(
 
   # Unnormalised log likelihood for Gaussian Process
   ldnorm = function(K, sigma2, beta) {
-    n_latent <- sigma2$shape[1]
 
+    n_latent <- sigma2$shape[1]
     single_eye <- torch_eye(self$N, device = self$device)$unsqueeze(1)
     batch_sigma2 <- single_eye$`repeat`(c(n_latent, 1, 1)) *
       sigma2$unsqueeze(2)$unsqueeze(2)
 
-    L <- robust_chol(K + batch_sigma2, upper = FALSE)
     slogdet <- linalg_slogdet(K + batch_sigma2)
+    L <- robust_chol(K + batch_sigma2, upper = FALSE)
 
     if (self$mean_zero) {
       alpha <- torch_cholesky_solve(self$y$unsqueeze(1), L, upper = FALSE)
@@ -89,7 +88,6 @@ GPR_class <- nn_module(
       alpha <- torch_cholesky_solve(y_demean, L, upper = FALSE)
       log_lik <- -0.5 * slogdet[[2]] - 0.5 * torch_matmul(y_demean$permute(c(1, 3, 2)), alpha)$squeeze()
     }
-
     return(log_lik)
   },
 
@@ -289,10 +287,10 @@ GPR_class <- nn_module(
   },
 
   # Method to evaluate predictive density
-  eval_pred_dens = function(x_new, y_new, nsamp, x_mean_new = NULL, log = FALSE) {
+  eval_pred_dens = function(y_new, x_new, nsamp, x_mean_new = NULL, log = FALSE) {
 
     with_no_grad({
-      pred_moments <- test$calc_pred_moments(x_new, nsamp, x_mean_new)
+      pred_moments <- self$calc_pred_moments(x_new, nsamp, x_mean_new)
       pred_mean <- pred_moments$pred_mean
       pred_var <- pred_moments$pred_var$squeeze()
 
@@ -300,7 +298,7 @@ GPR_class <- nn_module(
 
       log_dens <- ldnorm$log_prob(y_new$unsqueeze(2))$t()
       max <- torch_max(log_dens, dim = 1)
-      res <- -torch_log(torch_tensor(nsamp, device = test$device)) + max[[1]] + torch_log(torch_sum(torch_exp(log_dens - max[[1]]$unsqueeze(1)), dim = 1))
+      res <- -torch_log(torch_tensor(nsamp, device = self$device)) + max[[1]] + torch_log(torch_sum(torch_exp(log_dens - max[[1]]$unsqueeze(1)), dim = 1))
 
       if (!log) {
         res <- torch_exp(res)
