@@ -199,7 +199,7 @@ shrinkGPR <- function(formula, formula_mean, data, a = 0.5, c = 0.5, a_mean = 0.
 
           # Show number of latent variables if auto increase is on
           if (auto_increase) {
-            latent_message <- paste0(", Curr. #latent: ", n_latent, ", ")
+            latent_message <- paste0("Curr. #latent: ", n_latent, ", ")
           } else {
             latent_message <- ""
           }
@@ -243,7 +243,7 @@ shrinkGPR <- function(formula, formula_mean, data, a = 0.5, c = 0.5, a_mean = 0.
 
   # Print messages based on how the loop ended
   if (display_progress) {
-    message(paste0("Timing (elapsed): ", runtime["elapsed"], " seconds."))
+    message(paste0("Timing (elapsed): ", round(runtime["elapsed"], 2), " seconds."))
     message(paste0(round( i/ runtime[3]), " iterations per second."))
 
     if (stop_reason == "auto_stop" & i < n_epochs) {
@@ -254,21 +254,26 @@ shrinkGPR <- function(formula, formula_mean, data, a = 0.5, c = 0.5, a_mean = 0.
     }
   }
 
-  model_internals <- list(
-    terms = mt,
-    xlevels = .getXlevels(mt, mf),
-    data = data,
-    d_cov = x$shape[2]
-  )
+  if (missing(cont_model)) {
+    model_internals <- list(
+      terms = mt,
+      xlevels = .getXlevels(mt, mf),
+      data = data,
+      d_cov = x$shape[2]
+    )
 
-  if (!is.null(x_mean)) {
-    model_internals$terms_mean <- mt_mean
-    model_internals$xlevels_mean <- .getXlevels(mt_mean, mf_mean)
-    model_internals$x_mean <- TRUE
-    model_internals$d_mean <- x_mean$shape[2]
+    if (!is.null(x_mean)) {
+      model_internals$terms_mean <- mt_mean
+      model_internals$xlevels_mean <- .getXlevels(mt_mean, mf_mean)
+      model_internals$x_mean <- TRUE
+      model_internals$d_mean <- x_mean$shape[2]
+    } else {
+      model_internals$x_mean <- FALSE
+    }
   } else {
-    model_internals$x_mean <- FALSE
+    model_internals <- cont_model$model_internals
   }
+
 
   # Return list of results
   res <- list(model = best_model,

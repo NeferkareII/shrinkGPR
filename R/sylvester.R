@@ -18,8 +18,7 @@ sylvester <- nn_module(
     self$diag_activation <- torch_tanh
 
     reg <- 1/sqrt(self$d)
-    self$R1 <- nn_parameter(torch_zeros(self$d, self$d)$uniform_(-reg, reg))
-    self$R2 <- nn_parameter(torch_zeros(self$d, self$d)$uniform_(-reg, reg))
+    self$both_R <- nn_parameter(torch_zeros(self$d, self$d)$uniform_(-reg, reg))
 
     self$diag1 <- nn_parameter(torch_zeros(self$d)$uniform_(-reg, reg))
     self$diag2 <- nn_parameter(torch_zeros(self$d)$uniform_(-reg, reg))
@@ -55,8 +54,8 @@ sylvester <- nn_module(
   forward = function(zk) {
 
     # Bring all flow parameters into right shape
-    r1 <- self$R1 * self$triu_mask
-    r2 <- self$R2 * self$triu_mask
+    r1 <- self$both_R * self$triu_mask
+    r2 <- self$both_R$t() * self$triu_mask
 
     diag1 <- self$diag_activation(self$diag1)
     diag2 <- self$diag_activation(self$diag2)
