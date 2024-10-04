@@ -65,7 +65,7 @@ shrinkGPR <- function(formula, formula_mean, data, a = 0.5, c = 0.5, a_mean = 0.
 
     # Print initializing parameters message
     if (display_progress) {
-      message("Initializing parameters...")
+      message("Initializing parameters...", appendLF = FALSE)
     }
 
     # Merge user and default flow_args
@@ -94,6 +94,11 @@ shrinkGPR <- function(formula, formula_mean, data, a = 0.5, c = 0.5, a_mean = 0.
     optim_control_merged <- list_merger(default_optim_params, optim_control)
 
     optimizer <- do.call(optim_adam, optim_control_merged)
+
+    if (display_progress) {
+      message("Done!")
+    }
+
   } else {
     model <- cont_model$last_model
     optimizer <- cont_model$optimizer
@@ -231,18 +236,17 @@ shrinkGPR <- function(formula, formula_mean, data, a = 0.5, c = 0.5, a_mean = 0.
       stop_reason <<- "error"
       pb$terminate()
       message("\nError occurred at iteration ", i, ". Returning model trained so far.")
-    }, warning = function(w) {
-      if (grepl("batched routines are designed for small sizes", w$message)) {
-        invokeRestart("muffleWarning")  # Suppress this specific warning
-      } else {
-        warning(w)  # Let other warnings pass through
-      }
     })
   })
 
 
   # Print messages based on how the loop ended
   if (display_progress) {
+
+    if (stop_reason %in% c("auto_stop")) {
+      pb$terminate()
+    }
+
     message(paste0("Timing (elapsed): ", round(runtime["elapsed"], 2), " seconds."))
     message(paste0(round( i/ runtime[3]), " iterations per second."))
 
