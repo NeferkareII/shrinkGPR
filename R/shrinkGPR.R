@@ -90,6 +90,8 @@ shrinkGPR <- function(formula, formula_mean, data, a = 0.5, c = 0.5, a_mean = 0.
     # Merge user and default optim_control
     if (missing(optim_control)) optim_control <- list()
     default_optim_params <- formals(optim_adam)
+    default_optim_params$lr <- 1e-3
+    default_optim_params$weight_decay <- 1e-3
     default_optim_params$params <- model$parameters
     optim_control_merged <- list_merger(default_optim_params, optim_control)
 
@@ -147,10 +149,6 @@ shrinkGPR <- function(formula, formula_mean, data, a = 0.5, c = 0.5, a_mean = 0.
 
         # Compute gradients, i.e. backprop
         loss$backward(retain_graph = TRUE)
-
-        # Clip gradients
-        # Seems to be beneficial, can get pretty extreme around 0
-        nn_utils_clip_grad_norm_(model$parameters, max_norm = 1)
 
         # Update parameters
         optimizer$step()
