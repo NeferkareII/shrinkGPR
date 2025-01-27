@@ -1,5 +1,50 @@
-# This implements Sylvester normalizing flows, as described by
-# van den Berg (2018) in "Sylvester Normalizing Flows for Variational Inference".
+#' @title Sylvester Normalizing Flow
+#' @description
+#' The \code{sylvester} function implements Sylvester normalizing flows as described by
+#' van den Berg et al. (2018) in "Sylvester Normalizing Flows for Variational Inference."
+#' This flow applies a sequence of invertible transformations to map a simple base distribution
+#' to a more complex target distribution, allowing for flexible posterior approximations in Gaussian process regression models.
+#' @name sylvester
+#' @param d An integer specifying the latent dimensionality of the input space.
+#' @param n_householder An optional integer specifying the number of Householder reflections used to orthogonalize the transformation.
+#' Defaults to \code{d - 1}.
+#' @return An \code{nn_module} object representing the Sylvester normalizing flow. The module has the following key components:
+#' \itemize{
+#'   \item \code{forward(zk)}: The forward pass computes the transformed variable \code{z} and the log determinant of the Jacobian.
+#'   \item Internal parameters include matrices \code{R1} and \code{R2}, diagonal elements, and Householder reflections used for orthogonalization.
+#' }
+#' @details
+#' The Sylvester flow uses two triangular matrices (\code{R1} and \code{R2}) and Householder reflections to construct invertible transformations.
+#' The transformation is parameterized as follows:
+#' \deqn{z = Q R_1 h(Q^T R_2 zk + b) + zk,}
+#' where:
+#' \itemize{
+#'   \item \code{Q} is an orthogonal matrix obtained via Householder reflections.
+#'   \item \code{R1} and \code{R2} are upper triangular matrices with learned diagonal elements.
+#'   \item \code{h} is a non-linear activation function (default: \code{torch_tanh}).
+#'   \item \code{b} is a learned bias vector.
+#' }
+#'
+#' The log determinant of the Jacobian is computed to ensure the invertibility of the transformation and is given by:
+#' \deqn{\log |det J| = \sum_{i=1}^d \log |diag_1[i] \cdot diag_2[i] \cdot h'(RQ^T zk + b) + 1|,}
+#' where \code{diag_1} and \code{diag_2} are the learned diagonal elements of \code{R1} and \code{R2}, respectively, and \code{h\'} is the derivative of the activation function.
+#'
+#' @examples
+#' # Example: Initialize a Sylvester flow
+#' d <- 5
+#' n_householder <- 4
+#' flow <- sylvester(d, n_householder)
+#'
+#' # Forward pass through the flow
+#' zk <- torch_randn(10, d)  # Batch of 10 samples
+#' result <- flow(zk)
+#'
+#' print(result$zk)
+#' print(result$log_diag_j)
+#' @references
+#' van den Berg, R., Hasenclever, L., Tomczak, J. M., & Welling, M. (2018).
+#' "Sylvester Normalizing Flows for Variational Inference."
+#' \emph{Proceedings of the Thirty-Fourth Conference on Uncertainty in Artificial Intelligence (UAI 2018)}.
 #' @export
 sylvester <- nn_module(
   classname = "Sylvester",
@@ -51,7 +96,7 @@ sylvester <- nn_module(
     return(1 - self$h(x)^2)
   },
 
-  forward = function(zk) {
+  forward = function(z) {
 
     # Bring all flow parameters into right shape
     r1 <- self$both_R * self$triu_mask
@@ -73,8 +118,8 @@ sylvester <- nn_module(
     }
 
     # Compute QR1 and QR2
-    rqzb <- torch_matmul(r2, torch_matmul(hh$t(), zk$t())) + self$b$unsqueeze(2)
-    z <- zk + torch_matmul(hh, torch_matmul(r1, self$h(rqzb)))$t()
+    rqzb <- torch_matmul(r2, torch_matmul(hh$t(), z$t())) + self$b$unsqueeze(2)
+    zk <- z + torch_matmul(hh, torch_matmul(r1, self$h(rqzb)))$t()
 
     # Compute log|det J|
     # Output log_det_j in shape (batch_size) instead of (batch_size,1)
@@ -84,7 +129,7 @@ sylvester <- nn_module(
 
     log_diag_j = diag_j$abs()$log()$sum(2)
 
-    return(list(zk = z, log_diag_j = log_diag_j))
+    return(list(zk = zk, log_diag_j = log_diag_j))
 
   }
 )

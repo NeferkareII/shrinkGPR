@@ -110,4 +110,67 @@ list_merger <- function(default, user) {
   return(user)
 }
 
+# Small convenience function to check if something is a scalar
+is.scalar <- function(x) is.atomic(x) && length(x) == 1
+
+# Small input checkers
+numeric_input_bad <- function(x) {
+  if (is.scalar(x) == TRUE){
+    return(is.na(x) | x <= 0 | is.numeric(x) == FALSE )
+  } else {
+    return(TRUE)
+  }
+}
+
+numeric_input_bad_zer <- function(x) {
+  if (is.scalar(x) == TRUE){
+    return(is.na(x) | x < 0 | is.numeric(x) == FALSE )
+  } else {
+    return(TRUE)
+  }
+}
+
+numeric_input_bad_ <- function(x) {
+  if (is.scalar(x) == TRUE){
+    return(is.na(x) | is.numeric(x) == FALSE )
+  } else {
+    return(TRUE)
+  }
+}
+
+int_input_bad <- function(x) {
+  if (is.scalar(x) == TRUE){
+    if (is.numeric(x) == TRUE){
+      return(is.na(x) | x < 0 | x %% 1 != 0)
+    } else {
+      return(TRUE)
+    }
+  } else {
+    return(TRUE)
+  }
+}
+
+bool_input_bad <- function(x){
+  if (is.scalar(x) == TRUE){
+    return(is.na(x) | is.logical(x) == FALSE)
+  } else {
+    return(TRUE)
+  }
+}
+
+char_input_bad <- function(x){
+  if (is.scalar(x) == TRUE){
+    return(is.na(x) | is.character(x) == FALSE)
+  } else {
+    return(TRUE)
+  }
+}
+
+lty_input_bad <- function(x){
+  if (is.scalar(x) == TRUE){
+    return((x %in% 0:6 | x %in% c("blank", "solid", "dashed", "dotted", "dotdash", "longdash", "twodash")) == FALSE)
+  } else {
+    return(TRUE)
+  }
+}
 

@@ -1,20 +1,28 @@
 Package: shrinkGPR
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Scalable Gaussian Process Regression with Hierarchical Shrinkage Priors
 Version: 0.1.0
 Authors@R: c(
   person("Peter", "Knaus", email = "peter.knaus@wu.ac.at",
     role = c("aut", "cre"), comment = c(ORCID = "0000-0001-6498-7084")))
 Maintainer: Peter Knaus <peter.knaus@wu.ac.at>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
+Description: Efficient variational inference methods for fully Bayesian Gaussian 
+  Process Regression (GPR) models with hierarchical shrinkage priors, 
+  including the triple gamma prior for effective variable selection and 
+  covariance shrinkage in high-dimensional settings. The package leverages normalizing 
+  flows to approximate complex posterior distributions. For details on implementation, 
+  see Knaus (2025) <doi:10.48550/arXiv.2501.13173>.
 License: GPL (>= 2)
 Encoding: UTF-8
 LazyData: true
-Depends: 
+Depends:
+    R (>= 4.0.0),
     torch
 Imports:
     gsl,
     progress
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
