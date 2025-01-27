@@ -1,8 +1,23 @@
 #' @export
-shrinkGPR <- function(formula, formula_mean, data, a = 0.5, c = 0.5, a_mean = 0.5, c_mean = 0.5, sigma2_rate = 10,
-                      kernel_func = kernel_se, n_layers = 10, n_latent_start = 5, auto_increase = FALSE, max_latent = 50, n_latent_increase = 25,
-                      flow_func = sylvester, flow_args, n_epochs = 1000, auto_stop = TRUE, cont_model, device,
-                      display_progress = TRUE, optim_control) {
+shrinkGPR <- function(formula,
+                      data,
+                      a = 0.5,
+                      c = 0.5,
+                      formula_mean,
+                      a_mean = 0.5,
+                      c_mean = 0.5,
+                      sigma2_rate = 10,
+                      kernel_func = kernel_se,
+                      n_layers = 10,
+                      n_latent = 10,
+                      flow_func = sylvester,
+                      flow_args,
+                      n_epochs = 1000,
+                      auto_stop = TRUE,
+                      cont_model,
+                      device,
+                      display_progress = TRUE,
+                      optim_control) {
 
   # Add device attribute, set to GPU if available
   if (missing(device)) {
@@ -117,11 +132,6 @@ shrinkGPR <- function(formula, formula_mean, data, a = 0.5, c = 0.5, a_mean = 0.
   # Create vector to store ELBO
   loss_stor <- rep(NA_real_, n_epochs)
 
-  # Number of latent samples
-  # Idea here is to start off with a small number of samples and
-  # increase the number when there is no improvement in the ELBO for the last n_latent_increas iterations
-  # This needs to be fairly aggressive, so the early stopping is not triggered before it is time
-  n_latent <- n_latent_start
 
   # Number of iterations to check for significant improvement
   n_check <- 100
@@ -162,21 +172,6 @@ shrinkGPR <- function(formula, formula_mean, data, a = 0.5, c = 0.5, a_mean = 0.
           best_loss <- loss$item()
         }
 
-        # Increase number of latent variables by 1 if no significant improvement
-        if (auto_increase) {
-          if (i %% n_latent_increase == 0 &
-              i > (n_latent_increase - 1) &
-              n_latent < max_latent) {
-            X <- 1:n_latent_increase
-            Y <- loss_stor[(i - n_latent_increase + 1):i]
-            p_val <- lightweight_ols(Y, X)
-
-            if (p_val > 0.05) {
-              n_latent <- min(n_latent + 1, max_latent)
-            }
-          }
-        }
-
 
         # Auto stop if no improvement in n_check iterations
         if (auto_stop &
@@ -200,13 +195,6 @@ shrinkGPR <- function(formula, formula_mean, data, a = 0.5, c = 0.5, a_mean = 0.
           avg_loss_msg <- "Avg. loss last 50 iter.: "
           avg_loss_width <- 7
 
-          # Show number of latent variables if auto increase is on
-          if (auto_increase) {
-            latent_message <- paste0("Curr. #latent: ", n_latent, ", ")
-          } else {
-            latent_message <- ""
-          }
-
 
           # If less than 50 iterations, don't show avg loss
           if (i >= 50) {
@@ -216,12 +204,10 @@ shrinkGPR <- function(formula, formula_mean, data, a = 0.5, c = 0.5, a_mean = 0.
               avg_loss <- mean(loss_stor[(i - 49):i])
             }
 
-            curr_message <- paste0(latent_message,
-                                   avg_loss_msg,
+            curr_message <- paste0(avg_loss_msg,
                                    sprintf(paste0("%-", avg_loss_width, ".2f"), avg_loss))
           } else {
-            curr_message <- paste0(latent_message,
-                                   format("", width = nchar(avg_loss_msg) + avg_loss_width))
+            curr_message <- format("", width = nchar(avg_loss_msg) + avg_loss_width)
           }
           pb$tick(tokens = list(message = curr_message))
         }
