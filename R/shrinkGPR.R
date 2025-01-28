@@ -311,7 +311,7 @@ shrinkGPR <- function(formula,
   mf <- mf[c(1L, m)]
   mf$drop.unused.levels <- TRUE
   mf$na.action <- na.pass
-  mf[[1L]] <- quote(stats::model.frame)
+  mf[[1L]] <- quote(model.frame)
   mf <- eval(expr = mf, envir = parent.frame())
 
   # Create Vector y
@@ -490,11 +490,15 @@ shrinkGPR <- function(formula,
       }
     }, interrupt = function(ex) {
       stop_reason <<- "interrupted"
-      pb$terminate()
+      if (display_progress) {
+        pb$terminate()
+      }
       message("\nTraining interrupted at iteration ", i, ". Returning model trained so far.")
     }, error = function(ex) {
       stop_reason <<- "error"
-      pb$terminate()
+      if (display_progress) {
+        pb$terminate()
+      }
       message("\nError occurred at iteration ", i, ". Returning model trained so far.")
     })
   })

@@ -4,7 +4,7 @@
 \alias{predict.shrinkGPR}
 \title{Generate Predictions}
 \usage{
-\method{predict}{shrinkGPR}(object, newdata, nsamp = 100)
+\method{predict}{shrinkGPR}(object, newdata, nsamp = 100, ...)
 }
 \arguments{
 \item{object}{A \code{shrinkGPR} object representing the fitted Gaussian process regression model.}
@@ -12,6 +12,8 @@
 \item{newdata}{\emph{Optional} data frame containing the covariates for the prediction points. If missing, the training data is used.}
 
 \item{nsamp}{Positive integer specifying the number of posterior samples to generate. Default is 100.}
+
+\item{...}{Currently ignored.}
 }
 \value{
 A matrix containing posterior predictive samples for each covariate combination in \code{newdata}.

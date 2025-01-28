@@ -225,6 +225,7 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
 #' @param object A \code{shrinkGPR} object representing the fitted Gaussian process regression model.
 #' @param newdata \emph{Optional} data frame containing the covariates for the prediction points. If missing, the training data is used.
 #' @param nsamp Positive integer specifying the number of posterior samples to generate. Default is 100.
+#' @param ... Currently ignored.
 #' @return A matrix containing posterior predictive samples for each covariate combination in \code{newdata}.
 #' @details
 #' This function generates predictions by sampling from the posterior predictive distribution. If the mean equation is included in the model, the corresponding covariates are incorporated.
@@ -248,7 +249,7 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
 #' preds <- predict(res, newdata = newdata)
 #' }
 #' @export
-predict.shrinkGPR <- function(object, newdata, nsamp = 100) {
+predict.shrinkGPR <- function(object, newdata, nsamp = 100, ...) {
 
   # Input checking for predict.shrinkGPR ------------------------------------
 

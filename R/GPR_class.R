@@ -1,15 +1,23 @@
 # Create nn_module subclass that implements forward methods for GPR
 GPR_class <- nn_module(
   classname = "GPR",
-  initialize = function(y, x, x_mean,
-                        a = 0.5, c = 0.5, a_mean = 0.5, c_mean = 0.5, sigma2_rate = 10,
-                        n_layers, flow_func, flow_args,
-                        kernel_func = kernel_se, device) {
+  initialize = function(y,
+                        x,
+                        x_mean,
+                        a = 0.5,
+                        c = 0.5,
+                        a_mean = 0.5,
+                        c_mean = 0.5,
+                        sigma2_rate = 10,
+                        n_layers,
+                        flow_func,
+                        flow_args,
+                        kernel_func = shrinkGPR::kernel_se,
+                        device) {
 
     # Add dimension attribute
     # size of x +1 for the variance term + 1 for global shrinkage parameter
     # + size of x_mean, if provided
-
     self$d <- ncol(x) + 2
     self$mean_zero <- TRUE
     if (!missing(x_mean) & !is.null(x_mean)) {
@@ -220,7 +228,6 @@ GPR_class <- nn_module(
 
       if (!self$mean_zero) {
         beta <- zk_pos[, (self$x$shape[2] + 3):(self$x$shape[2] + 2 + self$x_mean$shape[2])]
-        lam_mean <- zk_pos[, -1]
       } else {
         beta <- NULL
       }
@@ -256,8 +263,8 @@ GPR_class <- nn_module(
           torch_matmul(x_mean_new, beta$t())$t()$squeeze()
       }
 
-      sigle_eye_new <- torch_eye(N_new, device = self$device)
-      batch_sigma2_new <- sigle_eye_new$`repeat`(c(nsamp, 1, 1)) *
+      single_eye_new <- torch_eye(N_new, device = self$device)
+      batch_sigma2_new <- single_eye_new$`repeat`(c(nsamp, 1, 1)) *
         sigma_zk$unsqueeze(2)$unsqueeze(2)
       v <- linalg_solve_triangular(L, K_star_t$permute(c(1, 3, 2)), upper = FALSE)
       pred_var <- K_star_star - torch_matmul(v$permute(c(1, 3, 2)), v) + batch_sigma2_new

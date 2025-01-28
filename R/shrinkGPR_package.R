@@ -6,6 +6,13 @@
 #'
 #' @importFrom progress progress_bar
 #'
+#' @importFrom stats model.response model.matrix model.frame rnorm na.pass delete.response .getXlevels pt
+#'
+#' @importFrom methods formalArgs
+#'
+#' @importFrom utils packageVersion
+#'
+#'
 ## usethis namespace: end
 
 .onAttach <- function(libname, pkgname) {
