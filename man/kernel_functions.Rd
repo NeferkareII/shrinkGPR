@@ -56,13 +56,13 @@ Users should ensure that the input tensors are of the correct dimensions.
 \examples{
 if (torch::torch_is_installed()) {
   # Example inputs
-  torch_manual_seed(123)
+  torch::torch_manual_seed(123)
   n_latent <- 3
   d <- 2
   N <- 5
-  thetas <- torch_randn(n_latent, d)$abs()
-  tau <- torch_randn(n_latent)$abs()
-  x <- torch_randn(N, d)
+  thetas <- torch::torch_randn(n_latent, d)$abs()
+  tau <- torch::torch_randn(n_latent)$abs()
+  x <- torch::torch_randn(N, d)
 
   # Compute the SE kernel
   K_se <- kernel_se(thetas, tau, x)
@@ -73,7 +73,7 @@ if (torch::torch_is_installed()) {
   print(K_matern32)
 
   # Compute the Matérn 5/2 kernel with x_star
-  x_star <- torch_randn(3, d)
+  x_star <- torch::torch_randn(3, d)
   K_matern52 <- kernel_matern_52(thetas, tau, x, x_star)
   print(K_matern52)
 }

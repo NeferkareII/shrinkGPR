@@ -4,10 +4,8 @@ output: github_document
 
 # shrinkGPR: Normalizing Flows for Hierarchical Shrinkage in Gaussian Process Regression Models
 
-This repository contains a pre-release version of `shrinkGPR` package for Gaussian Process Regression with hierarchical shrinkage priors. 
-Note that, as of version 0.1.0, no input checks are performed.
-`shrinkGPR` uses the `torch` package to estimate the parameters via variational inference. As such, it is designed with CUDA in mind and may be
-slow without it. Guidance on how to install `torch` with CUDA support can be found [here](https://cran.r-project.org/web/packages/torch/vignettes/installation.html).
+This repository contains the development version of `shrinkGPR` package for Gaussian Process Regression with hierarchical shrinkage priors. 
+`shrinkGPR` uses the `torch` package to estimate the parameters via variational inference and does not function without it. Specifically, it is designed with GPU acceleration via CUDA in mind and may be slow without it. Guidance on how to install `torch` with CUDA support can be found [here](https://cran.r-project.org/web/packages/torch/vignettes/installation.html).
 
 The code below walks through a simple example, but is not exhaustive. It simulates data, fits a shrinkage GPR model, checks model convergence, extracts posterior samples, and makes predictions.
 
@@ -20,6 +18,16 @@ Ensure that you have installed the `shrinkGPR` package and Torch for R before ru
 remotes::install_github("NeferkareII/shrinkGPR")
 library(shrinkGPR)
 ```
+
+```{r}
+# Check if torch is installed, if this returns FALSE, the package will not work
+torch::torch_is_installed()
+```
+```{r}
+# Check if CUDA is available, if this returns FALSE, the package will work, albeit slower
+torch::cuda_is_available()
+```
+
 
 ```{r, echo = FALSE, message=FALSE, warning=FALSE}
 library(shrinkGPR)

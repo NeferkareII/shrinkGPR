@@ -37,7 +37,7 @@
 #'   flow <- sylvester(d, n_householder)
 #'
 #'   # Forward pass through the flow
-#'   zk <- torch_randn(10, d)  # Batch of 10 samples
+#'   zk <- torch::torch_randn(10, d)  # Batch of 10 samples
 #'   result <- flow(zk)
 #'
 #'   print(result$zk)

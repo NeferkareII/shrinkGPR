@@ -16,7 +16,7 @@
 #' if (torch::torch_is_installed()) {
 #'   # Simulate data
 #'   set.seed(123)
-#'   torch_manual_seed(123)
+#'   torch::torch_manual_seed(123)
 #'   n <- 100
 #'   x <- matrix(runif(n * 2), n, 2)
 #'   y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
@@ -103,7 +103,7 @@ eval_pred_dens <- function(x, mod, data_test, nsamp = 100, log = FALSE){
 #' if (torch::torch_is_installed()) {
 #'   # Simulate data
 #'   set.seed(123)
-#'   torch_manual_seed(123)
+#'   torch::torch_manual_seed(123)
 #'   n <- 100
 #'   x <- matrix(runif(n * 2), n, 2)
 #'   y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
@@ -167,7 +167,7 @@ LPDS <- function(mod, data_test, nsamp = 100) {
 #' if (torch::torch_is_installed()) {
 #'   # Simulate data
 #'   set.seed(123)
-#'   torch_manual_seed(123)
+#'   torch::torch_manual_seed(123)
 #'   n <- 100
 #'   x <- matrix(runif(n * 2), n, 2)
 #'   y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
@@ -240,7 +240,7 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
 #' if (torch::torch_is_installed()) {
 #'   # Simulate data
 #'   set.seed(123)
-#'   torch_manual_seed(123)
+#'   torch::torch_manual_seed(123)
 #'   n <- 100
 #'   x <- matrix(runif(n * 2), n, 2)
 #'   y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
@@ -320,7 +320,7 @@ predict.shrinkGPR <- function(object, newdata, nsamp = 100, ...) {
 #' if (torch::torch_is_installed()) {
 #'   # Simulate data
 #'   set.seed(123)
-#'   torch_manual_seed(123)
+#'   torch::torch_manual_seed(123)
 #'   n <- 100
 #'   x <- matrix(runif(n * 2), n, 2)
 #'   y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)

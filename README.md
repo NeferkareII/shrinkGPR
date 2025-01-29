@@ -1,11 +1,11 @@
 
 # shrinkGPR: Normalizing Flows for Hierarchical Shrinkage in Gaussian Process Regression Models
 
-This repository contains a pre-release version of `shrinkGPR` package
-for Gaussian Process Regression with hierarchical shrinkage priors. Note
-that, as of version 0.1.0, no input checks are performed. `shrinkGPR`
-uses the `torch` package to estimate the parameters via variational
-inference. As such, it is designed with CUDA in mind and may be slow
+This repository contains the development version of `shrinkGPR` package
+for Gaussian Process Regression with hierarchical shrinkage priors.
+`shrinkGPR` uses the `torch` package to estimate the parameters via
+variational inference and does not function without it. Specifically, it
+is designed with GPU acceleration via CUDA in mind and may be slow
 without it. Guidance on how to install `torch` with CUDA support can be
 found
 [here](https://cran.r-project.org/web/packages/torch/vignettes/installation.html).
@@ -24,6 +24,20 @@ before running the code. You can install the package using:
 remotes::install_github("NeferkareII/shrinkGPR")
 library(shrinkGPR)
 ```
+
+``` r
+# Check if torch is installed, if this returns FALSE, the package will not work
+torch::torch_is_installed()
+```
+
+    ## [1] TRUE
+
+``` r
+# Check if CUDA is available, if this returns FALSE, the package will work, albeit slower
+torch::cuda_is_available()
+```
+
+    ## [1] TRUE
 
 ## Usage
 
@@ -58,7 +72,7 @@ Plot the model’s loss to monitor convergence:
 plot(model$loss_stor, type = "l")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 ### Generate posterior samples
 
@@ -75,7 +89,7 @@ boxplot(samples$thetas, lwd = 2, outline = FALSE, xaxt = "n")
 axis(1, at = 1:ncol(samples$thetas), labels = paste0("theta_", 1:3), las = 2, cex.axis = 0.7)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
 Note that the first parameter is the only one with a non-zero median.
 The other two parameters are shrunk towards zero.
@@ -100,4 +114,4 @@ polygon(c(sim$data$x.1[order], rev(sim$data$x.1[order])),
         col = adjustcolor("skyblue", alpha.f = 0.3), border = NA)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->

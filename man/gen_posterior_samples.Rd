@@ -32,7 +32,7 @@ This function draws posterior samples from the latent space and transforms them 
 if (torch::torch_is_installed()) {
   # Simulate data
   set.seed(123)
-  torch_manual_seed(123)
+  torch::torch_manual_seed(123)
   n <- 100
   x <- matrix(runif(n * 2), n, 2)
   y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)

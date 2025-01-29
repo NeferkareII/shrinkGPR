@@ -37,6 +37,8 @@
 #'
 #' @examples
 #' if (torch::torch_is_installed()) {
+#'   torch::torch_manual_seed(123)
+#'
 #'   # Simulate data with default settings
 #'   sim_data <- simGPR()
 #'
