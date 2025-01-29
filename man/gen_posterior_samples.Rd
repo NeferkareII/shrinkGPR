@@ -29,21 +29,23 @@ This function draws posterior samples from the latent space and transforms them 
 }
 \examples{
 \donttest{
-# Simulate data
-set.seed(123)
-torch_manual_seed(123)
-n <- 100
-x <- matrix(runif(n * 2), n, 2)
-y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
-data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
+if (torch::torch_is_installed()) {
+  # Simulate data
+  set.seed(123)
+  torch_manual_seed(123)
+  n <- 100
+  x <- matrix(runif(n * 2), n, 2)
+  y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
+  data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
 
-# Fit GPR model
-res <- shrinkGPR(y ~ x1 + x2, data = data)
+  # Fit GPR model
+  res <- shrinkGPR(y ~ x1 + x2, data = data)
 
-# Generate posterior samples
-samps <- gen_posterior_samples(res, nsamp = 1000)
+  # Generate posterior samples
+  samps <- gen_posterior_samples(res, nsamp = 1000)
 
-# Plot the posterior samples
-boxplot(samps$thetas)
+  # Plot the posterior samples
+  boxplot(samps$thetas)
+  }
 }
 }

@@ -36,17 +36,19 @@
 #' covariates \code{x_mean} and regression coefficients \code{beta}.
 #'
 #' @examples
-#' # Simulate data with default settings
-#' sim_data <- simGPR()
+#' if (torch::torch_is_installed()) {
+#'   # Simulate data with default settings
+#'   sim_data <- simGPR()
 #'
-#' # Simulate data with custom settings
-#' sim_data <- simGPR(N = 100, d = 5, d_mean = 2, perc_spars = 0.3, sigma2 = 0.5)
+#'   # Simulate data with custom settings
+#'   sim_data <- simGPR(N = 100, d = 5, d_mean = 2, perc_spars = 0.3, sigma2 = 0.5)
 #'
-#' # Access the simulated data
-#' head(sim_data$data)
+#'   # Access the simulated data
+#'   head(sim_data$data)
 #'
-#' # Access the true values used for simulation
-#' sim_data$true_vals
+#'   # Access the true values used for simulation
+#'   sim_data$true_vals
+#'   }
 #' @export
 simGPR <-  function(N = 200,
                     d = 3,

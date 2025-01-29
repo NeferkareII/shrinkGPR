@@ -29,27 +29,29 @@
 #' Note that these functions perform no input checks, as to ensure higher performance.
 #' Users should ensure that the input tensors are of the correct dimensions.
 #' @examples
-#' # Example inputs
-#' torch_manual_seed(123)
-#' n_latent <- 3
-#' d <- 2
-#' N <- 5
-#' thetas <- torch_randn(n_latent, d)$abs()
-#' tau <- torch_randn(n_latent)$abs()
-#' x <- torch_randn(N, d)
+#' if (torch::torch_is_installed()) {
+#'   # Example inputs
+#'   torch_manual_seed(123)
+#'   n_latent <- 3
+#'   d <- 2
+#'   N <- 5
+#'   thetas <- torch_randn(n_latent, d)$abs()
+#'   tau <- torch_randn(n_latent)$abs()
+#'   x <- torch_randn(N, d)
 #'
-#' # Compute the SE kernel
-#' K_se <- kernel_se(thetas, tau, x)
-#' print(K_se)
+#'   # Compute the SE kernel
+#'   K_se <- kernel_se(thetas, tau, x)
+#'   print(K_se)
 #'
-#' # Compute the Matérn 3/2 kernel
-#' K_matern32 <- kernel_matern_32(thetas, tau, x)
-#' print(K_matern32)
+#'   # Compute the Matérn 3/2 kernel
+#'   K_matern32 <- kernel_matern_32(thetas, tau, x)
+#'   print(K_matern32)
 #'
-#' # Compute the Matérn 5/2 kernel with x_star
-#' x_star <- torch_randn(3, d)
-#' K_matern52 <- kernel_matern_52(thetas, tau, x, x_star)
-#' print(K_matern52)
+#'   # Compute the Matérn 5/2 kernel with x_star
+#'   x_star <- torch_randn(3, d)
+#'   K_matern52 <- kernel_matern_52(thetas, tau, x, x_star)
+#'   print(K_matern52)
+#' }
 NULL
 
 sqdist <- function(x, thetas, x_star = NULL) {

@@ -26,22 +26,24 @@ It is computed as the log of the marginal predictive density of the observed res
 }
 \examples{
 \donttest{
-# Simulate data
-set.seed(123)
-torch_manual_seed(123)
-n <- 100
-x <- matrix(runif(n * 2), n, 2)
-y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
-data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
+if (torch::torch_is_installed()) {
+  # Simulate data
+  set.seed(123)
+  torch_manual_seed(123)
+  n <- 100
+  x <- matrix(runif(n * 2), n, 2)
+  y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
+  data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
 
-# Fit GPR model
-res <- shrinkGPR(y ~ x1 + x2, data = data)
+  # Fit GPR model
+  res <- shrinkGPR(y ~ x1 + x2, data = data)
 
-# Calculate true y value and calculate LPDS at specific point
-x1_new <- 0.8
-x2_new <- 0.5
-y_true <- sin(2 * pi * x1_new)
-data_test <- data.frame(y = y_true, x1 = x1_new, x2 = x2_new)
-LPDS(res, data_test)
+  # Calculate true y value and calculate LPDS at specific point
+  x1_new <- 0.8
+  x2_new <- 0.5
+  y_true <- sin(2 * pi * x1_new)
+  data_test <- data.frame(y = y_true, x1 = x1_new, x2 = x2_new)
+  LPDS(res, data_test)
+  }
 }
 }

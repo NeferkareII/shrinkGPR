@@ -42,17 +42,19 @@ The log determinant of the Jacobian is computed to ensure the invertibility of t
 where \code{diag_1} and \code{diag_2} are the learned diagonal elements of \code{R1} and \code{R2}, respectively, and \code{h\'} is the derivative of the activation function.
 }
 \examples{
-# Example: Initialize a Sylvester flow
-d <- 5
-n_householder <- 4
-flow <- sylvester(d, n_householder)
+if (torch::torch_is_installed()) {
+  # Example: Initialize a Sylvester flow
+  d <- 5
+  n_householder <- 4
+  flow <- sylvester(d, n_householder)
 
-# Forward pass through the flow
-zk <- torch_randn(10, d)  # Batch of 10 samples
-result <- flow(zk)
+  # Forward pass through the flow
+  zk <- torch_randn(10, d)  # Batch of 10 samples
+  result <- flow(zk)
 
-print(result$zk)
-print(result$log_diag_j)
+  print(result$zk)
+  print(result$log_diag_j)
+}
 }
 \references{
 van den Berg, R., Hasenclever, L., Tomczak, J. M., & Welling, M. (2018).

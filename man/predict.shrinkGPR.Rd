@@ -26,21 +26,23 @@ This function generates predictions by sampling from the posterior predictive di
 }
 \examples{
 \donttest{
-# Simulate data
-set.seed(123)
-torch_manual_seed(123)
-n <- 100
-x <- matrix(runif(n * 2), n, 2)
-y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
-data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
+if (torch::torch_is_installed()) {
+  # Simulate data
+  set.seed(123)
+  torch_manual_seed(123)
+  n <- 100
+  x <- matrix(runif(n * 2), n, 2)
+  y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
+  data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
 
-# Fit GPR model
-res <- shrinkGPR(y ~ x1 + x2, data = data)
-# Example usage for in-sample prediction
-preds <- predict(res)
+  # Fit GPR model
+  res <- shrinkGPR(y ~ x1 + x2, data = data)
+  # Example usage for in-sample prediction
+  preds <- predict(res)
 
-# Example usage for out-of-sample prediction
-newdata <- data.frame(x1 = runif(10), x2 = runif(10))
-preds <- predict(res, newdata = newdata)
+  # Example usage for out-of-sample prediction
+  newdata <- data.frame(x1 = runif(10), x2 = runif(10))
+  preds <- predict(res, newdata = newdata)
+  }
 }
 }

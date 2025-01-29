@@ -29,25 +29,27 @@ This function computes predictive densities by marginalizing over posterior samp
 }
 \examples{
 \donttest{
-# Simulate data
-set.seed(123)
-torch_manual_seed(123)
-n <- 100
-x <- matrix(runif(n * 2), n, 2)
-y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
-data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
+if (torch::torch_is_installed()) {
+  # Simulate data
+  set.seed(123)
+  torch_manual_seed(123)
+  n <- 100
+  x <- matrix(runif(n * 2), n, 2)
+  y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
+  data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
 
-# Fit GPR model
-res <- shrinkGPR(y ~ x1 + x2, data = data)
+  # Fit GPR model
+  res <- shrinkGPR(y ~ x1 + x2, data = data)
 
-# Create point at which to evaluate predictive density
-data_test <- data.frame(x1 = 0.8, x2 = 0.5)
-eval_points <- c(-1.2, -1, 0)
+  # Create point at which to evaluate predictive density
+  data_test <- data.frame(x1 = 0.8, x2 = 0.5)
+  eval_points <- c(-1.2, -1, 0)
 
-eval_pred_dens(eval_points, res, data_test)
+  eval_pred_dens(eval_points, res, data_test)
 
-# Is vectorized, can also be used in functions like curve
-curve(eval_pred_dens(x, res, data_test), from = -1.5, to = -0.5)
-abline(v = sin(2 * pi * 0.8), col = "red")
+  # Is vectorized, can also be used in functions like curve
+  curve(eval_pred_dens(x, res, data_test), from = -1.5, to = -0.5)
+  abline(v = sin(2 * pi * 0.8), col = "red")
+  }
 }
 }

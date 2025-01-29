@@ -140,38 +140,39 @@
 #'
 #' @examples
 #' \donttest{
-#' # Simulate data
-#' set.seed(123)
-#' torch_manual_seed(123)
-#' n <- 100
-#' x <- matrix(runif(n * 2), n, 2)
-#' y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
-#' data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
+#' if (torch::torch_is_installed()) {
+#'   # Simulate data
+#'   set.seed(123)
+#'   torch_manual_seed(123)
+#'   n <- 100
+#'   x <- matrix(runif(n * 2), n, 2)
+#'   y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
+#'   data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
 #'
-#' # Fit GPR model
-#' res <- shrinkGPR(y ~ x1 + x2, data = data)
+#'   # Fit GPR model
+#'   res <- shrinkGPR(y ~ x1 + x2, data = data)
 #'
-#' # Check convergence
-#' plot(res$loss_stor, type = "l", main = "Loss Over Iterations")
+#'   # Check convergence
+#'   plot(res$loss_stor, type = "l", main = "Loss Over Iterations")
 #'
-#' # Check posterior
-#' samps <- gen_posterior_samples(res, nsamp = 1000)
-#' boxplot(samps$thetas) # Second theta is pulled towards zero
+#'   # Check posterior
+#'   samps <- gen_posterior_samples(res, nsamp = 1000)
+#'   boxplot(samps$thetas) # Second theta is pulled towards zero
 #'
-#' # Predict
-#' x1_new <- seq(from = 0, to = 1, length.out = 100)
-#' x2_new <- runif(100)
-#' y_new <- predict(res, newdata = data.frame(x1 = x1_new, x2 = x2_new), nsamp = 2000)
+#'   # Predict
+#'   x1_new <- seq(from = 0, to = 1, length.out = 100)
+#'   x2_new <- runif(100)
+#'   y_new <- predict(res, newdata = data.frame(x1 = x1_new, x2 = x2_new), nsamp = 2000)
 #'
-#' # Plot
-#' quants <- apply(y_new, 2, quantile, c(0.025, 0.5, 0.975))
-#' plot(x1_new, quants[2, ], type = "l", ylim = c(-1.5, 1.5),
-#'      xlab = "x1", ylab = "y", lwd = 2)
-#' polygon(c(x1_new, rev(x1_new)), c(quants[1, ], rev(quants[3, ])),
+#'   # Plot
+#'   quants <- apply(y_new, 2, quantile, c(0.025, 0.5, 0.975))
+#'   plot(x1_new, quants[2, ], type = "l", ylim = c(-1.5, 1.5),
+#'         xlab = "x1", ylab = "y", lwd = 2)
+#'   polygon(c(x1_new, rev(x1_new)), c(quants[1, ], rev(quants[3, ])),
 #'         col = adjustcolor("skyblue", alpha.f = 0.5), border = NA)
-#' points(x[,1], y)
-#' curve(sin(2 * pi * x), add = TRUE, col = "forestgreen", lwd = 2, lty = 2)
-#'
+#'   points(x[,1], y)
+#'   curve(sin(2 * pi * x), add = TRUE, col = "forestgreen", lwd = 2, lty = 2)
+#'   }
 #' }
 #' @export
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}

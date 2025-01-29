@@ -1,4 +1,9 @@
 test_shrinkGPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
+
+  if (!torch::torch_is_installed()) {
+    skip("Torch is not installed. Skipping test.")
+  }
+
   set.seed(123)
   torch_manual_seed(123)
 
