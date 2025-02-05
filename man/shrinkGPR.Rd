@@ -33,14 +33,14 @@ The response variable and covariates are specified here.}
 \item{data}{\emph{optional} data frame containing the response variable and the covariates. If not found in \code{data},
 the variables are taken from \code{environment(formula)}. No \code{NA}s are allowed in the response variable or covariates.}
 
-\item{a}{positive real number controlling the shrinkage prior for the covariance structure. The default is 0.5.}
+\item{a}{positive real number controlling the behavior at the origin of the shrinkage prior for the covariance structure. The default is 0.5.}
 
 \item{c}{positive real number controlling the tail behavior of the shrinkage prior for the covariance structure. The default is 0.5.}
 
 \item{formula_mean}{\emph{optional} formula for the linear mean equation. If provided, the covariates for the mean structure
 are specified separately from the covariance structure. A response variable is not required in this formula.}
 
-\item{a_mean}{positive real number controlling the shrinkage prior for the mean structure. The default is 0.5.}
+\item{a_mean}{positive real number controlling the behavior at the origin of the shrinkage for the mean structure. The default is 0.5.}
 
 \item{c_mean}{positive real number controlling the tail behavior of the shrinkage prior for the mean structure. The default is 0.5.}
 
@@ -219,6 +219,11 @@ if (torch::torch_is_installed()) {
         col = adjustcolor("skyblue", alpha.f = 0.5), border = NA)
   points(x[,1], y)
   curve(sin(2 * pi * x), add = TRUE, col = "forestgreen", lwd = 2, lty = 2)
+
+
+
+  # Add mean equation
+  res2 <- shrinkGPR(y ~ x1 + x2, formula_mean = ~ x1, data = data)
   }
 }
 }
