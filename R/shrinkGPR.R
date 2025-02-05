@@ -13,8 +13,8 @@
 #' the variables are taken from \code{environment(formula)}. No \code{NA}s are allowed in the response variable or covariates.
 #' @param a positive real number controlling the shrinkage prior for the covariance structure. The default is 0.5.
 #' @param c positive real number controlling the tail behavior of the shrinkage prior for the covariance structure. The default is 0.5.
-#' @param formula_mean \emph{optional} formula for the mean equation. If provided, the response variable and covariates for the mean structure
-#' are specified separately from the covariance structure.
+#' @param formula_mean \emph{optional} formula for the linear mean equation. If provided, the covariates for the mean structure
+#' are specified separately from the covariance structure. A response variable is not required in this formula.
 #' @param a_mean positive real number controlling the shrinkage prior for the mean structure. The default is 0.5.
 #' @param c_mean positive real number controlling the tail behavior of the shrinkage prior for the mean structure. The default is 0.5.
 #' @param sigma2_rate positive real number controlling the prior rate parameter for the residual variance. The default is 10.

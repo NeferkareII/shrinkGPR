@@ -37,8 +37,8 @@ the variables are taken from \code{environment(formula)}. No \code{NA}s are allo
 
 \item{c}{positive real number controlling the tail behavior of the shrinkage prior for the covariance structure. The default is 0.5.}
 
-\item{formula_mean}{\emph{optional} formula for the mean equation. If provided, the response variable and covariates for the mean structure
-are specified separately from the covariance structure.}
+\item{formula_mean}{\emph{optional} formula for the linear mean equation. If provided, the covariates for the mean structure
+are specified separately from the covariance structure. A response variable is not required in this formula.}
 
 \item{a_mean}{positive real number controlling the shrinkage prior for the mean structure. The default is 0.5.}
 

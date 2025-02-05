@@ -1,7 +1,7 @@
 Package: shrinkGPR
 Type: Package
 Title: Scalable Gaussian Process Regression with Hierarchical Shrinkage Priors
-Version: 1.0.0
+Version: 1.0.1
 Authors@R: c(
   person("Peter", "Knaus", email = "peter.knaus@wu.ac.at",
     role = c("aut", "cre"), comment = c(ORCID = "0000-0001-6498-7084")))
