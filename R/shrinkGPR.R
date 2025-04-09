@@ -433,14 +433,15 @@ shrinkGPR <- function(formula,
         log_det_J <- zk_log_det_J$log_det_J
 
         # Calculate loss, i.e. ELBO
-        loss <- -model$elbo(zk_pos, log_det_J)
+        # suppressWarnings because torchscript does not yet support torch.linalg.cholesky
+        loss <- suppressMessages(-model$elbo(zk_pos, log_det_J))
         loss_stor[i] <- loss$item()
 
         # Zero gradients
         optimizer$zero_grad()
 
         # Compute gradients, i.e. backprop
-        loss$backward(retain_graph = TRUE)
+        loss$backward(retain_graph = FALSE)
 
         # Update parameters
         optimizer$step()
@@ -494,7 +495,7 @@ shrinkGPR <- function(formula,
           pb$tick(tokens = list(message = curr_message))
         }
       }
-    }, interrupt = function(ex) {
+  }, interrupt = function(ex) {
       stop_reason <<- "interrupted"
       if (display_progress) {
         pb$terminate()

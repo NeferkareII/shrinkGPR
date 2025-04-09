@@ -10,6 +10,7 @@
 #' @param kernel_func Function specifying the covariance kernel. Default is \code{kernel_se}.
 #' @param perc_spars Numeric value in \[0, 1\] indicating the proportion of elements in \code{theta}
 #' and \code{beta} to sparsify. Default is 0.5.
+#' @param rho Numeric value in \[0, 1\] indicating the correlation between the covariates. Default is 0.
 #' @param theta \emph{Optional} numeric vector specifying the true inverse length-scale parameters.
 #' If not provided, they are randomly generated.
 #' @param beta \emph{Optional} numeric vector specifying the true regression coefficients for the mean
@@ -59,6 +60,7 @@ simGPR <-  function(N = 200,
                     tau = 2,
                     kernel_func = kernel_se,
                     perc_spars = 0.5,
+                    rho = 0,
                     theta,
                     beta,
                     device){
@@ -119,6 +121,11 @@ simGPR <-  function(N = 200,
     stop("The argument 'device', if provided, must be a valid 'torch_device' object.")
   }
 
+  # Check that rho is a numeric value between 0 and 1
+  if (!is.numeric(rho) || rho < 0 || rho > 1) {
+    stop("The argument 'rho' must be a numeric value between 0 and 1.")
+  }
+
   # Add device attribute, set to GPU if available
   if (missing(device)) {
     if (cuda_is_available()) {
@@ -165,8 +172,24 @@ simGPR <-  function(N = 200,
   theta_tens <- torch_tensor(theta, device = device)$unsqueeze(1)
   tau_tensor <- torch_tensor(tau, device = device)$unsqueeze(2)
 
-  # Generate y
-  x_tens <- torch_randn(N, d, device = device)
+  # Generate x
+  if (rho > 0) {
+    Sigma <- matrix(rho, nrow = d, ncol = d)
+    diag(Sigma) <- 1
+    Sigma <- torch_tensor(Sigma, dtype = torch_float(), device = device)
+
+    # Cholesky decomposition
+    L <- linalg_cholesky(Sigma)
+
+    # Generate standard normal noise
+    Z <- torch_randn(c(N, d), device = device)
+
+    # Multiply by Cholesky factor to introduce correlation
+    x_tens <- Z$matmul(L$t())
+  } else {
+    x_tens <- torch_randn(N, d, device = device)
+  }
+
   K <- kernel_func(theta_tens, tau_tensor, x_tens)$squeeze() + sigma2 * torch_eye(N, device = device)
 
   if (d_mean > 0) {

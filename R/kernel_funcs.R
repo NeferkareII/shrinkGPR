@@ -55,30 +55,14 @@
 NULL
 
 sqdist <- function(x, thetas, x_star = NULL) {
-  X_thetas <- x$unsqueeze(3) * torch_sqrt(thetas$t())
-  sq <- torch_sum(X_thetas^2, 2, keepdim = TRUE)
-
-  if (is.null(x_star)) {
-
-    sqdist <- (sq + sq$permute(c(2, 1, 3)))$permute(c(3, 1, 2)) -
-      2 * torch_bmm(X_thetas$permute(c(3, 1, 2)), X_thetas$permute(c(3, 2, 1)))
-
-  } else {
-
-    X_star_thetas <- x_star$unsqueeze(3) * torch_sqrt(thetas$t())
-    sq_star <- torch_sum(X_star_thetas^2, 2, keepdim = TRUE)
-    sqdist <- (sq_star + sq$permute(c(2, 1, 3)))$permute(c(3, 1, 2)) -
-      2 * torch_bmm(X_star_thetas$permute(c(3, 1, 2)), X_thetas$permute(c(3, 2, 1)))
-
-  }
+  sqdist <- .shrinkGPR_internal$jit_funcs$sqdist(x, thetas, x_star)
   return(sqdist)
 }
 
 #' @rdname kernel_functions
 #' @export
 kernel_se <- function(thetas, tau, x, x_star = NULL) {
-  sqdist_x <- sqdist(x, thetas, x_star)
-  K <- 1/(tau$unsqueeze(2)$unsqueeze(2)) * torch_exp(-0.5 * sqdist_x)
+  K <-  .shrinkGPR_internal$jit_funcs$kernel_se(thetas, tau, x, x_star)
 
   return(K)
 }
@@ -86,26 +70,20 @@ kernel_se <- function(thetas, tau, x, x_star = NULL) {
 #' @rdname kernel_functions
 #' @export
 kernel_matern_12 <- function(thetas, tau, x, x_star = NULL) {
-  sqdist <- torch_sqrt(sqdist(x, thetas, x_star) + 1e-4)
-  K <- 1/(tau$unsqueeze(2)$unsqueeze(2)) * torch_exp(-sqdist)
-
+  K <- .shrinkGPR_internal$jit_funcs$kernel_matern_12(thetas, tau, x, x_star)
   return(K)
 }
 
 #' @rdname kernel_functions
 #' @export
 kernel_matern_32 <- function(thetas, tau, x, x_star = NULL) {
-  sqdist <- torch_sqrt(sqdist(x, thetas, x_star) + 1e-4)
-  K <- 1/(tau$unsqueeze(2)$unsqueeze(2)) * (1 + sqrt(3) * sqdist) * torch_exp(-sqrt(3) * sqdist)
-
+  K <- .shrinkGPR_internal$jit_funcs$kernel_matern_32(thetas, tau, x, x_star)
   return(K)
 }
 
 #' @rdname kernel_functions
 #' @export
 kernel_matern_52 <- function(thetas, tau, x, x_star = NULL) {
-  sqdist <- torch_sqrt(sqdist(x, thetas, x_star) + 1e-4)
-  K <- 1/(tau$unsqueeze(2)$unsqueeze(2)) * (1 + sqrt(5) * sqdist + 5/3 * sqdist^2) * torch_exp(-sqrt(5) * sqdist)
-
+  K <- .shrinkGPR_internal$jit_funcs$kernel_matern_52(thetas, tau, x, x_star)
   return(K)
 }

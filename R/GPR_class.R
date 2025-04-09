@@ -67,6 +67,8 @@ GPR_class <- nn_module(
     self$x <- x$to(device = self$device)
     if (!self$mean_zero) {
       self$x_mean <- x_mean$to(device = self$device)
+    } else {
+      self$x_mean <- NULL
     }
 
     #create holders for prior a, c, lam and rate
@@ -79,23 +81,14 @@ GPR_class <- nn_module(
 
   # Unnormalised log likelihood for Gaussian Process
   ldnorm = function(K, sigma2, beta) {
-
-    n_latent <- sigma2$shape[1]
-    single_eye <- torch_eye(self$N, device = self$device)$unsqueeze(1)
-    batch_sigma2 <- single_eye$`repeat`(c(n_latent, 1, 1)) *
-      sigma2$unsqueeze(2)$unsqueeze(2)
-
-    slogdet <- linalg_slogdet(K + batch_sigma2)
-    L <- robust_chol(K + batch_sigma2, upper = FALSE)
-
-    if (self$mean_zero) {
-      alpha <- torch_cholesky_solve(self$y$unsqueeze(1), L, upper = FALSE)
-      log_lik <- -0.5 * slogdet[[2]] - 0.5 * torch_matmul(self$y$unsqueeze(1)$permute(c(1, 3, 2)), alpha)$squeeze()
-    } else {
-      y_demean <- (self$y - torch_matmul(self$x_mean, beta$t()))$t()$unsqueeze(3)
-      alpha <- torch_cholesky_solve(y_demean, L, upper = FALSE)
-      log_lik <- -0.5 * slogdet[[2]] - 0.5 * torch_matmul(y_demean$permute(c(1, 3, 2)), alpha)$squeeze()
-    }
+    log_lik <- .shrinkGPR_internal$jit_funcs$ldnorm(
+      K = K,
+      sigma2 = sigma2,
+      y = self$y,
+      x_mean = self$x_mean,
+      beta = beta,
+      mean_zero = self$mean_zero
+    )
     return(log_lik)
   },
 
