@@ -75,17 +75,12 @@ sylvester <- nn_module(
     self$b <- nn_parameter(torch_zeros(self$d)$uniform_(-reg, reg))
 
     triu_mask <- torch_triu(torch_ones(self$d, self$d), diagonal = 1)$requires_grad_(FALSE)
-    # For some reason, torch_arange goes from a to b if dtype is not specified
-    # but from a to b - 1 if dtype is set to torch_long()
-    diag_idx <- torch_arange(1, self$d, dtype = torch_long())$requires_grad_(FALSE)
     identity <- torch_eye(self$d, self$d)$requires_grad_(FALSE)
 
     self$triu_mask <- nn_buffer(triu_mask)
-    self$diag_idx <- nn_buffer(diag_idx)
     self$identity <- nn_buffer(identity)
 
     self$register_buffer("triu_mask", triu_mask)
-    self$register_buffer("diag_idx", diag_idx)
     self$register_buffer("eye", identity)
 
   },
