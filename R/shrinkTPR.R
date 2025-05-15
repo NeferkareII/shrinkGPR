@@ -1,10 +1,10 @@
-#' Gaussian Process Regression with Shrinkage and Normalizing Flows
+#' Student-t Process Regression with Shrinkage and Normalizing Flows
 #'
-#' \code{shrinkGPR} implements Gaussian process regression (GPR) with a hierarchical shrinkage prior for hyperparameter estimation,
+#' \code{shrinkTPR} implements Student-t process regression (TPR), as described in Shah et al. (2014), with a hierarchical shrinkage prior for hyperparameter estimation,
 #' incorporating normalizing flows to approximate the posterior distribution. The function facilitates model specification, optimization,
 #' and training, including support for early stopping, user-defined kernels, and flow-based transformations.
 #'
-#' This implementation provides a computationally efficient framework for GPR, enabling flexible modeling of mean and covariance structures.
+#' This implementation provides a computationally efficient framework for TPR, enabling flexible modeling of mean and covariance structures.
 #' Users can specify custom kernel functions, flow transformations, and hyperparameter configurations to adapt the model to their data.
 #'
 #' @param formula object of class "formula": a symbolic representation of the model for the covariance equation, as in \code{\link{lm}}.
@@ -18,6 +18,10 @@
 #' @param a_mean positive real number controlling the behavior at the origin of the shrinkage for the mean structure. The default is 0.5.
 #' @param c_mean positive real number controlling the tail behavior of the shrinkage prior for the mean structure. The default is 0.5.
 #' @param sigma2_rate positive real number controlling the prior rate parameter for the residual variance. The default is 10.
+#' @param nu_alpha positive real number controlling the shape parameter of the shifted gamma prior for the degrees of freedom of
+#' the Student-t process. The default is 0.5.
+#' @param nu_beta positive real number controlling the scale parameter of the shifted gamma prior for the degrees of freedom of
+#' the Student-t process. The default is 2.
 #' @param kernel_func function specifying the covariance kernel. The default is \code{\link{kernel_se}}, a squared exponential kernel.
 #' For guidance on how to provide a custom kernel function, see Details.
 #' @param n_layers positive integer specifying the number of flow layers in the normalizing flow. The default is 10.
@@ -28,13 +32,13 @@
 #' For guidance on how to provide a custom flow function, see Details.
 #' @param n_epochs positive integer specifying the number of training epochs. The default is 1000.
 #' @param auto_stop logical value indicating whether to enable early stopping based on convergence. The default is \code{TRUE}.
-#' @param cont_model \emph{optional} object returned from a previous \code{shrinkGPR} call, enabling continuation of training from the saved state.
+#' @param cont_model \emph{optional} object returned from a previous \code{shrinkTPR} call, enabling continuation of training from the saved state.
 #' @param device \emph{optional} device to run the model on, e.g., \code{torch_device("cuda")} for GPU or \code{torch_device("cpu")} for CPU.
 #' Defaults to GPU if available; otherwise, CPU.
 #' @param display_progress logical value indicating whether to display progress bars and messages during training. The default is \code{TRUE}.
 #' @param optim_control \emph{optional} named list containing optimizer parameters. If not provided, default settings are used.
 #'
-#' @return A list object of class \code{shrinkGPR}, containing:
+#' @return A list object of class \code{shrinkTPR}, containing:
 #' \item{\code{model}}{The best-performing trained model.}
 #' \item{\code{loss}}{The best loss value (ELBO) achieved during training.}
 #' \item{\code{loss_stor}}{A numeric vector storing the ELBO values at each training iteration.}
@@ -43,7 +47,7 @@
 #' \item{\code{model_internals}}{Internal objects required for predictions and further training, such as model matrices and formulas.}
 #'
 #' @details
-#' The \code{shrinkGPR} function combines Gaussian process regression with shrinkage priors and normalizing flows for efficient
+#' The \code{shrinkTPR} function combines Student-t process regression with shrinkage priors and normalizing flows for efficient
 #' and flexible hyperparameter estimation. It supports custom kernels, hierarchical shrinkage priors for mean and covariance structures,
 #' and flow-based posterior approximations. The \code{auto_stop} option allows early stopping based on lack of improvement in ELBO.
 #'
@@ -89,7 +93,7 @@
 #' \item \strong{Check Positive Semi-Definiteness:}
 #'   Validate that the kernel produces a positive semi-definite covariance matrix for valid inputs.
 #' \item \strong{Integrate:}
-#'   Use the custom kernel with \code{shrinkGPR} to confirm its compatibility.
+#'   Use the custom kernel with \code{shrinkTPR} to confirm its compatibility.
 #' }
 #'
 #' Examples of kernel functions can be found in the \code{kernel_funcs.R} file in the package source code,
@@ -149,8 +153,8 @@
 #'   y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
 #'   data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
 #'
-#'   # Fit GPR model
-#'   res <- shrinkGPR(y ~ x1 + x2, data = data)
+#'   # Fit TPR model
+#'   res <- shrinkTPR(y ~ x1 + x2, data = data)
 #'
 #'   # Check convergence
 #'   plot(res$loss_stor, type = "l", main = "Loss Over Iterations")
@@ -176,12 +180,14 @@
 #'
 #'
 #'   # Add mean equation
-#'   res2 <- shrinkGPR(y ~ x1 + x2, formula_mean = ~ x1, data = data)
+#'   res2 <- shrinkTPR(y ~ x1 + x2, formula_mean = ~ x1, data = data)
 #'   }
 #' }
+#' @references
+#' Shah, A., Wilson, A., & Ghahramani, Z. (2014, April). Student-t processes as alternatives to Gaussian processes. In Artificial intelligence and statistics (pp. 877-885). PMLR.
 #' @export
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
-shrinkGPR <- function(formula,
+shrinkTPR <- function(formula,
                       data,
                       a = 0.5,
                       c = 0.5,
@@ -189,6 +195,8 @@ shrinkGPR <- function(formula,
                       a_mean = 0.5,
                       c_mean = 0.5,
                       sigma2_rate = 10,
+                      nu_alpha = 0.5,
+                      nu_beta = 2,
                       kernel_func = kernel_se,
                       n_layers = 10,
                       n_latent = 10,
@@ -219,6 +227,8 @@ shrinkGPR <- function(formula,
     c = c,
     a_mean = a_mean,
     c_mean = c_mean,
+    nu_alpha = nu_alpha,
+    nu_beta = nu_beta,
     sigma2_rate = sigma2_rate
   )
 
@@ -271,7 +281,7 @@ shrinkGPR <- function(formula,
 
   # Check continuation model (if provided)
   if (!missing(cont_model) && !is.list(cont_model)) {
-    stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkGPR' call.")
+    stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkTPR' call.")
   }
 
   # Check device
@@ -296,8 +306,8 @@ shrinkGPR <- function(formula,
   }
 
   if (!missing(cont_model)) {
-    if (!inherits(cont_model, "shrinkGPR")) {
-      stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkGPR' call.")
+    if (!inherits(cont_model, "shrinkTPR")) {
+      stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkTPR' call.")
     }
   }
 
@@ -380,9 +390,9 @@ shrinkGPR <- function(formula,
       x_mean <- torch_tensor(x_mean, device = device)
     }
 
-    model <- GPR_class(y, x, x_mean, a = a, c = c, a_mean = a_mean, c_mean = c_mean,
-                       sigma2_rate = sigma2_rate, n_layers, flow_func, flow_args_merged,
-                       kernel_func = kernel_se, device)
+    model <- TPR_class(y, x, x_mean, a = a, c = c, a_mean = a_mean, c_mean = c_mean,
+                       sigma2_rate = sigma2_rate, nu_alpha = nu_alpha, nu_beta = nu_beta,
+                       n_layers, flow_func, flow_args_merged, kernel_func = kernel_se, device)
 
     # Merge user and default optim_control
     if (missing(optim_control)) optim_control <- list()
@@ -495,19 +505,19 @@ shrinkGPR <- function(formula,
           pb$tick(tokens = list(message = curr_message))
         }
       }
-  # }, interrupt = function(ex) {
-  #     stop_reason <<- "interrupted"
-  #     if (display_progress) {
-  #       pb$terminate()
-  #     }
-  #     message("\nTraining interrupted at iteration ", i, ". Returning model trained so far.")
-  #   }, error = function(ex) {
-  #     stop_reason <<- "error"
-  #     if (display_progress) {
-  #       pb$terminate()
-  #     }
-  #     message("\nError occurred at iteration ", i, ". Returning model trained so far.")
-  #   })
+    # }, interrupt = function(ex) {
+    #   stop_reason <<- "interrupted"
+    #   if (display_progress) {
+    #     pb$terminate()
+    #   }
+    #   message("\nTraining interrupted at iteration ", i, ". Returning model trained so far.")
+    # }, error = function(ex) {
+    #   stop_reason <<- "error"
+    #   if (display_progress) {
+    #     pb$terminate()
+    #   }
+    #   message("\nError occurred at iteration ", i, ". Returning model trained so far.")
+    # })
   })
 
 
@@ -558,7 +568,7 @@ shrinkGPR <- function(formula,
               optimizer = optimizer,
               model_internals = model_internals)
 
-  attr(res, "class") <- "shrinkGPR"
+  attr(res, "class") <- "shrinkTPR"
   attr(res, "device") <- device
 
   return(res)

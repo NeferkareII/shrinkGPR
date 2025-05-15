@@ -1,6 +1,6 @@
-# Create nn_module subclass that implements forward methods for GPR
-GPR_class <- nn_module(
-  classname = "GPR",
+# Create nn_module subclass that implements forward methods for TPR
+TPR_class <- nn_module(
+  classname = "TPR",
   initialize = function(y,
                         x,
                         x_mean,
@@ -9,6 +9,8 @@ GPR_class <- nn_module(
                         a_mean = 0.5,
                         c_mean = 0.5,
                         sigma2_rate = 10,
+                        nu_alpha = 0.5,
+                        nu_beta = 2,
                         n_layers,
                         flow_func,
                         flow_args,
@@ -17,8 +19,9 @@ GPR_class <- nn_module(
 
     # Add dimension attribute
     # size of x +1 for the variance term + 1 for global shrinkage parameter
+    # NEW for t dist: +1 for nu
     # + size of x_mean, if provided
-    self$d <- ncol(x) + 2
+    self$d <- ncol(x) + 3
     self$mean_zero <- TRUE
     if (!missing(x_mean) & !is.null(x_mean)) {
       # +1 for global shrinkage parameter
@@ -77,17 +80,21 @@ GPR_class <- nn_module(
     self$prior_a_mean <- torch_tensor(a_mean, device = self$device, requires_grad = FALSE)
     self$prior_c_mean <- torch_tensor(c_mean, device = self$device, requires_grad = FALSE)
     self$prior_rate <- torch_tensor(sigma2_rate, device = self$device, requires_grad = FALSE)
+
+    # For prior on nu
+    self$nu_alpha <- torch_tensor(nu_alpha, device = self$device, requires_grad = FALSE)
+    self$nu_beta <- torch_tensor(nu_beta, device = self$device, requires_grad = FALSE)
   },
 
-  # Unnormalised log likelihood for Gaussian Process
-  ldnorm = function(K, sigma2, beta) {
-    log_lik <- .shrinkGPR_internal$jit_funcs$ldnorm(
+  # Unnormalised log likelihood for Student-t Process
+  ldt = function(K, sigma2, beta, nu) {
+    log_lik <- .shrinkGPR_internal$jit_funcs$ldt(
       K = K,
       sigma2 = sigma2,
       y = self$y,
       x_mean = self$x_mean,
-      beta = beta
-    )
+      beta = beta,
+      nu = nu)
     return(log_lik)
   },
 
@@ -121,7 +128,13 @@ GPR_class <- nn_module(
     return(res)
   },
 
-  # Forward method for GPR
+  # Unnormalised log density of gamma distribution
+  ldg = function(x, alpha, beta) {
+    res <- (alpha - 1.0) * torch_log(x) - beta * x
+    return(res)
+  },
+
+  # Forward method for TPR
   forward = function(zk) {
     log_det_J <- 0
 
@@ -139,12 +152,17 @@ GPR_class <- nn_module(
       log_det_J <- log_det_J + self$beta_sp * torch_sum(zk[, 1:(self$x$shape[2] + 2)] - self$softplus(zk[, 1:(self$x$shape[2] + 2)]), dim = 2)
       l2_sigma_lam <- self$softplus(zk[, 1:(self$x$shape[2] + 2)])
 
+      log_det_J <- log_det_J + self$beta_sp * (zk[, -2] - self$softplus(zk[, -2]))
+      lam_mean <- self$softplus(zk[, -2])
+
+      # For nu
       log_det_J <- log_det_J + self$beta_sp * (zk[, -1] - self$softplus(zk[, -1]))
-      lam_mean <- self$softplus(zk[, -1])
+      nu <- self$softplus(zk[, -1])
 
       zk <- torch_cat(list(l2_sigma_lam,
                            zk[, (self$x$shape[2] + 3):(self$x$shape[2] + self$x_mean$shape[2] + 2)],
-                           lam_mean$unsqueeze(2)),
+                           lam_mean$unsqueeze(2),
+                           nu$unsqueeze(2)),
                       dim = 2)
     }
 
@@ -164,14 +182,16 @@ GPR_class <- nn_module(
     # Next component is the sigma parameter
     # Next component is the lambda parameter
     # Next x_mean$shape[2] components are the mean parameters
-    # Last component is the lambda parameter for the mean
+    # Next component is the lambda parameter for the mean
+    # Last component is the nu parameter (degrees of freedom for t dist)
     l2_zk <- zk_pos[, 1:self$x$shape[2]]
     sigma_zk <- zk_pos[, (self$x$shape[2] + 1)]
     lam_zk <- zk_pos[, (self$x$shape[2] + 2)]
+    nu_zk <- zk_pos[, -1] + 2 # +2 to ensure nu > 2
 
     if (!self$mean_zero) {
       beta <- zk_pos[, (self$x$shape[2] + 3):(self$x$shape[2] + 2 + self$x_mean$shape[2])]
-      lam_mean <- zk_pos[, -1]
+      lam_mean <- zk_pos[, -2]
     } else {
       beta <- NULL
     }
@@ -180,11 +200,12 @@ GPR_class <- nn_module(
     K <- self$kernel_func(l2_zk, lam_zk, self$x)
 
     # Calculate the components of the ELBO
-    likelihood <- self$ldnorm(K, sigma_zk, beta)$mean()
+    likelihood <- self$ldt(K, sigma_zk, beta, nu_zk)$mean()
 
     prior <- self$ltg(l2_zk, self$prior_a, self$prior_c, lam_zk)$sum(dim = 2)$mean() +
       self$ldf(lam_zk/2, 2*self$prior_a, 2*self$prior_c)$mean() +
-      self$lexp(sigma_zk, self$prior_rate)$mean()
+      self$lexp(sigma_zk, self$prior_rate)$mean() +
+      self$ldg(nu_zk - 2, self$nu_alpha, self$nu_beta)$mean()
 
     if (!self$mean_zero) {
       prior <- prior + self$ngg(beta, self$prior_a_mean, self$prior_c_mean, lam_zk)$sum(dim = 2)$mean() +
@@ -217,6 +238,7 @@ GPR_class <- nn_module(
       l2_zk <- zk_pos[, 1:self$x$shape[2]]
       sigma_zk <- zk_pos[, (self$x$shape[2] + 1)]
       lam_zk <- zk_pos[, (self$x$shape[2] + 2)]
+      nu_zk <- zk_pos[, -1] + 2 # +2 to ensure nu > 2
 
       if (!self$mean_zero) {
         beta <- zk_pos[, (self$x$shape[2] + 3):(self$x$shape[2] + 2 + self$x_mean$shape[2])]
@@ -236,18 +258,22 @@ GPR_class <- nn_module(
 
       if (self$mean_zero) {
         alpha <- torch_cholesky_solve(self$y, L, upper = FALSE)
+        y_demean <- self$y
       } else {
         y_demean <- (self$y - torch_matmul(self$x_mean, beta$t()))$t()$unsqueeze(3)
         alpha <- torch_cholesky_solve(y_demean, L, upper = FALSE)
       }
 
       # Calculate K_star_star, the covariance between the test data
-      K_star_star <- self$kernel_func(l2_zk, lam_zk, x_new)
+      single_eye <- torch_eye(N_new, device = self$device)
+      batch_sigma2 <- single_eye$`repeat`(c(nsamp, 1, 1)) *
+        sigma_zk$unsqueeze(2)$unsqueeze(2)
+      K_star_star <- self$kernel_func(l2_zk, lam_zk, x_new) + batch_sigma2
 
       # Calculate K_star, the covariance between the training and test data
       K_star_t <- self$kernel_func(l2_zk, lam_zk, self$x, x_new)
 
-      # Calculate the predictive mean and variance
+      # Calculate the predictive mean and scale
       if (self$mean_zero) {
         pred_mean <- torch_bmm(K_star_t, alpha)$squeeze()
       } else {
@@ -259,9 +285,12 @@ GPR_class <- nn_module(
       batch_sigma2_new <- single_eye_new$`repeat`(c(nsamp, 1, 1)) *
         sigma_zk$unsqueeze(2)$unsqueeze(2)
       v <- linalg_solve_triangular(L, K_star_t$permute(c(1, 3, 2)), upper = FALSE)
-      pred_var <- K_star_star - torch_matmul(v$permute(c(1, 3, 2)), v) + batch_sigma2_new
+      pred_scale <- (K_star_star - torch_matmul(v$permute(c(1, 3, 2)), v)) *
+        ((nu_zk$unsqueeze(2) + torch_mm(alpha$squeeze(), y_demean) - 2 ) / (nu_zk + self$N - 2)$unsqueeze(2))$unsqueeze(3)
 
-      return(list(pred_mean = pred_mean, pred_var = pred_var))
+      pred_nu <- nu_zk$unsqueeze(2)$unsqueeze(3) + self$N
+
+      return(list(pred_mean = pred_mean, pred_scale = pred_scale, pred_nu = pred_nu$squeeze()))
     })
   },
 
@@ -273,16 +302,32 @@ GPR_class <- nn_module(
       # Calculate the moments of the predictive distribution
       pred_moments <- self$calc_pred_moments(x_new, nsamp, x_mean_new)
       pred_mean <- pred_moments$pred_mean
-      pred_var <- pred_moments$pred_var
+      pred_scale <- pred_moments$pred_scale
+      pred_nu <- pred_moments$pred_nu
 
-      pred_var_chol <- robust_chol(pred_var, upper = FALSE)
+      pred_scale_chol <- robust_chol(pred_scale, upper = FALSE)
       eps <- torch_randn(nsamp, N_new, 1, device = self$device)
 
-      pred_samples <- pred_mean$unsqueeze(1) + torch_bmm(pred_var_chol, eps)$squeeze()
+      r <- torch_tensor(1/rgamma(nsamp, as.matrix(pred_moments$pred_nu) / 2, 1 / 2),
+                        device = self$device)$view(c(nsamp, 1))
+
+      pred_samples <- pred_mean + sqrt(r * (pred_nu$view(c(nsamp, 1)) - 2)) * torch_bmm(pred_scale_chol, eps)$squeeze()
 
       return(pred_samples$squeeze())
     })
 
+  },
+
+  # Density function of the predictive distribution
+  # Note this is only univariate
+  dt = function(y_test, pred_mean, pred_scale, pred_nu) {
+
+    pi_tens <- torch_log(torch_tensor(pi, device = self$device))
+
+    torch_lgamma((pred_nu + 1) * 0.5) -
+      0.5 * (torch_log(pred_scale) + torch_log(pred_nu - 2) + torch_log(pi_tens)) -
+      torch_lgamma(pred_nu * 0.5) -
+      ((pred_nu + 1) * 0.5) * torch_log(1 + (y_test - pred_mean) ^ 2 / ((pred_nu - 2) * pred_scale))
   },
 
   # Method to evaluate predictive density
@@ -291,11 +336,10 @@ GPR_class <- nn_module(
     with_no_grad({
       pred_moments <- self$calc_pred_moments(x_new, nsamp, x_mean_new)
       pred_mean <- pred_moments$pred_mean
-      pred_var <- pred_moments$pred_var$squeeze()
+      pred_scale <- pred_moments$pred_scale$squeeze()
+      pred_nu <- pred_moments$pred_nu
 
-      ldnorm <- distr_normal(pred_mean, torch_sqrt(pred_var))
-
-      log_dens <- ldnorm$log_prob(y_new$unsqueeze(2))$t()
+      log_dens <- self$dt(y_new$unsqueeze(2), pred_mean, pred_scale, pred_nu)$t()
       max <- torch_max(log_dens, dim = 1)
       res <- -torch_log(torch_tensor(nsamp, device = self$device)) + max[[1]] + torch_log(torch_sum(torch_exp(log_dens - max[[1]]$unsqueeze(1)), dim = 1))
 

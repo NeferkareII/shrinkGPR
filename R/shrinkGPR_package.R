@@ -100,7 +100,6 @@ def ldnorm(
     y: torch.Tensor,
     x_mean: Optional[torch.Tensor],
     beta: Optional[torch.Tensor],
-    mean_zero: List[bool]
 ) -> torch.Tensor:
 
     B, N, _ = K.size()
@@ -122,6 +121,36 @@ def ldnorm(
     quad = torch.matmul(y_batch.transpose(1, 2), alpha).squeeze(-1).squeeze(-1)
 
     log_lik = -0.5 * slogdet - 0.5 * quad
+    return log_lik
+
+def ldt(
+    K: torch.Tensor,
+    sigma2: torch.Tensor,
+    y: torch.Tensor,
+    x_mean: Optional[torch.Tensor],
+    beta: Optional[torch.Tensor],
+    nu: torch.Tensor
+) -> torch.Tensor:
+
+    B, N, _ = K.size()
+    I = torch.eye(N, device=K.device).unsqueeze(0).expand(B, N, N)
+    sigma_term = I * sigma2.view(B, 1, 1)
+    K_eps = K + sigma_term
+
+    L = torch.cholesky(K_eps)
+    slogdet = 2.0 * torch.sum(torch.log(torch.diagonal(L, dim1=-2, dim2=-1)), dim=1)
+
+    if (beta is not None and x_mean is not None):
+        y_demean = (y - torch.matmul(x_mean, beta.transpose(0, 1))).transpose(0, 1).unsqueeze(-1)
+        y_batch = y_demean
+    else:
+        y_batch = y.unsqueeze(0).expand(B, N, 1)
+
+
+    alpha = torch.cholesky_solve(y_batch, L)
+    quad = torch.matmul(y_batch.transpose(1, 2), alpha).squeeze(-1).squeeze(-1)
+
+    log_lik = torch.lgamma((nu + N)*0.5) - 0.5 * N * torch.log(nu - 2) - torch.lgamma(0.5 * nu) -0.5 * slogdet - 0.5 * (nu + N) * torch.log(1 + 1/(nu - 2) * quad)
     return log_lik
 
 def kernel_se(thetas: torch.Tensor, tau: torch.Tensor, x: torch.Tensor, x_star: Optional[torch.Tensor]) -> torch.Tensor:

@@ -12,6 +12,7 @@ simGPR(
   tau = 2,
   kernel_func = kernel_se,
   perc_spars = 0.5,
+  rho = 0,
   theta,
   beta,
   device
@@ -32,6 +33,8 @@ simGPR(
 
 \item{perc_spars}{Numeric value in [0, 1] indicating the proportion of elements in \code{theta}
 and \code{beta} to sparsify. Default is 0.5.}
+
+\item{rho}{Numeric value in [0, 1] indicating the correlation between the covariates. Default is 0.}
 
 \item{theta}{\emph{Optional} numeric vector specifying the true inverse length-scale parameters.
 If not provided, they are randomly generated.}

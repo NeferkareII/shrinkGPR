@@ -29,7 +29,7 @@ robust_chol <- function(A, tol = 1e-6, upper = FALSE) {
     jitter <- tol
     sucess <- FALSE
     while (!sucess & jitter < 1) {
-      Lower <- linalg_cholesky_ex(A + jitter * torch_eye(A$size(2)))
+      Lower <- linalg_cholesky_ex(A + jitter * torch_eye(A$size(2), device = A$device))
 
       if (!Lower$info$any()$item()) {
         sucess <- TRUE
