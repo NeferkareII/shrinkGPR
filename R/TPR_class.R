@@ -322,10 +322,10 @@ TPR_class <- nn_module(
   # Note this is only univariate
   dt = function(y_test, pred_mean, pred_scale, pred_nu) {
 
-    pi_tens <- torch_log(torch_tensor(pi, device = self$device))
+    lpi_tens <- torch_log(torch_tensor(pi, device = self$device))
 
     torch_lgamma((pred_nu + 1) * 0.5) -
-      0.5 * (torch_log(pred_scale) + torch_log(pred_nu - 2) + torch_log(pi_tens)) -
+      0.5 * (torch_log(pred_scale) + torch_log(pred_nu - 2) + lpi_tens) -
       torch_lgamma(pred_nu * 0.5) -
       ((pred_nu + 1) * 0.5) * torch_log(1 + (y_test - pred_mean) ^ 2 / ((pred_nu - 2) * pred_scale))
   },
