@@ -156,6 +156,19 @@ def ldt(
     log_lik = torch.lgamma((nu + N)*0.5) - 0.5 * N * torch.log(nu - 2) - torch.lgamma(0.5 * nu) -0.5 * slogdet - 0.5 * (nu + N) * torch.log(1 + 1/(nu - 2) * quad)
     return log_lik
 
+def make_tril(
+    x: torch.Tensor,
+    size: List[int]
+) -> torch.Tensor:
+
+    size_int = int(size[0])
+    tril_indices = torch.tril_indices(size_int, size_int, device=x.device, offset = -1)
+    A = torch.zeros(x.shape[0], size_int, size_int, device=x.device)
+    A[:, tril_indices[0], tril_indices[1]] = x[:, size_int:(size_int*(size_int+1)//2)]
+    A[:, torch.arange(size_int), torch.arange(size_int)] = x[:, :size_int]
+
+    return  A
+
 def kernel_se(thetas: torch.Tensor, tau: torch.Tensor, x: torch.Tensor, x_star: Optional[torch.Tensor]) -> torch.Tensor:
     D = sqdist(x, thetas, x_star)
     return (1.0 / tau.unsqueeze(1).unsqueeze(2)) * torch.exp(-0.5 * D)
