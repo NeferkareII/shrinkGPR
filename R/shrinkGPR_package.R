@@ -6,11 +6,13 @@
 #'
 #' @importFrom progress progress_bar
 #'
-#' @importFrom stats model.response model.matrix model.frame rnorm na.pass delete.response .getXlevels pt
+#' @importFrom stats model.response model.matrix model.frame rnorm na.pass delete.response .getXlevels pt rgamma
 #'
 #' @importFrom methods formalArgs
 #'
-#' @importFrom utils packageVersion
+#' @importFrom utils packageVersion getFromNamespace
+#'
+#' @importFrom graphics boxplot
 #'
 #'
 ## usethis namespace: end

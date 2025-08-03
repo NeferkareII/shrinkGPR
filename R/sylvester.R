@@ -54,7 +54,7 @@ sylvester <- nn_module(
 
 
     if (missing(n_householder)) {
-      n_householder <- d - 1
+      n_householder <- min(5, d - 1)
     }
 
     self$d <- d

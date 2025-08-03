@@ -152,7 +152,7 @@ simGPR <-  function(N = 200,
   }
 
   if (missing(theta)){
-    theta <- rnorm(d, mean = 1.5)^2
+    theta <- rgamma(d, 6, 24)
 
     # Sparsify
     theta[sample(1:d, round(d * perc_spars))] <- 0

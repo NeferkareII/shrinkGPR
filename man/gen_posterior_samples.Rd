@@ -22,7 +22,7 @@ A list containing posterior samples of the model parameters:
 }
 }
 \description{
-\code{gen_posterior_samples} generates posterior samples of the model parameters from a fitted \code{shrinkGPR} model.
+\code{gen_posterior_samples} generates posterior samples of the model parameters from a fitted \code{shrinkGPR} or \code{shrinkTPR} model.
 }
 \details{
 This function draws posterior samples from the latent space and transforms them into the parameter space of the model. These samples can be used for posterior inference or further analysis.

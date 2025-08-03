@@ -1,7 +1,7 @@
 Package: shrinkGPR
 Type: Package
 Title: Scalable Gaussian Process Regression with Hierarchical Shrinkage Priors
-Version: 1.0.1
+Version: 1.1
 Authors@R: c(
   person("Peter", "Knaus", email = "peter.knaus@wu.ac.at",
     role = c("aut", "cre"), comment = c(ORCID = "0000-0001-6498-7084")))
@@ -16,7 +16,7 @@ License: GPL (>= 2)
 Encoding: UTF-8
 LazyData: true
 Depends:
-    R (>= 4.0.0)
+    R (>= 4.1.0)
 Imports:
     gsl,
     progress,
@@ -27,6 +27,8 @@ Imports:
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Suggests: 
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+    shrinkTVP,
+    plotly
 Config/testthat/edition: 3
 SystemRequirements: torch backend, for installation guide see https://cran.r-project.org/web/packages/torch/vignettes/installation.html

@@ -53,6 +53,38 @@ test_shrinkTPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
   expect_named(posterior, c("thetas", "sigma2", "lambda", "nu"))
   expect_equal(nrow(posterior$thetas), 100)
 
+  # Test marginal generation (1D)
+  marg1 <- gen_marginal_samples(res, to_eval = "x1", nsamp = 10, n_eval_points = 10)
+  expect_type(marg1, "list")
+  expect_true(all(c("mean_pred", "grid") %in% names(marg1)))
+  expect_equal(dim(marg1$mean_pred), c(10, 10))
+  expect_length(marg1$grid, 10)
+  expect_s3_class(marg1, "shrinkGPR_marg_samples_1D")
+
+  # Test marginal generation (2D)
+  marg2 <- gen_marginal_samples(res, to_eval = c("x1", "x2"), nsamp = 5, n_eval_points = 5)
+  expect_type(marg2, "list")
+  expect_true(all(c("mean_pred", "grid") %in% names(marg2)))
+  expect_equal(dim(marg2$mean_pred), c(5, 5, 5))
+  expect_type(marg2$grid, "list")
+  expect_length(marg2$grid, 2)
+  expect_s3_class(marg2, "shrinkGPR_marg_samples_2D")
+
+  # Test plotting method (1D)
+  if (requireNamespace("shrinkTVP", quietly = TRUE)) {
+    expect_silent(plot(marg1))
+  } else {
+    expect_error(plot(marg1), "The 'shrinkTVP' package is required")
+  }
+
+  # Test plotting method (2D)
+  if (requireNamespace("plotly", quietly = TRUE)) {
+    p <- plot(marg2)
+    expect_s3_class(p, "plotly")
+  } else {
+    expect_error(plot(marg2), "The 'plotly' package is required")
+  }
+
   if (res$model_internals$x_mean) {
     expect_true(all(c("betas", "lambda_mean") %in% names(posterior)))
   }
