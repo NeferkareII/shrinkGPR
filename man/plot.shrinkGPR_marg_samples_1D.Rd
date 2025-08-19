@@ -21,7 +21,8 @@ Generates a plot of 1D conditional predictive samples produced by \code{\link{ge
 with a single covariate.
 }
 \details{
-The function visualizes the posterior predictive mean for the selected covariate across a grid of evaluation points.
+By default, the function visualizes the posterior predictive median and 95\% and 50\% credible intervals
+for the selected covariate across a grid of evaluation points.
 Axis labels are automatically inferred if not explicitly provided.
 
 Note: The \pkg{shrinkTVP} package must be installed to use this function.

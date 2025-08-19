@@ -6,7 +6,7 @@
 #'
 #' @importFrom progress progress_bar
 #'
-#' @importFrom stats model.response model.matrix model.frame rnorm na.pass delete.response .getXlevels pt rgamma
+#' @importFrom stats model.response model.matrix model.frame rnorm na.pass delete.response .getXlevels pt rgamma median
 #'
 #' @importFrom methods formalArgs
 #'
