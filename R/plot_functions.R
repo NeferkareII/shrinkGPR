@@ -82,7 +82,8 @@ plot.shrinkTPR <- function(x, nsamp = 1000, ...) {
 #' such as axis labels or plotting options.
 #'
 #' @details
-#' The function visualizes the posterior predictive mean for the selected covariate across a grid of evaluation points.
+#' By default, the function visualizes the posterior predictive median and 95% and 50% credible intervals
+#' for the selected covariate across a grid of evaluation points.
 #' Axis labels are automatically inferred if not explicitly provided.
 #'
 #' Note: The \pkg{shrinkTVP} package must be installed to use this function.
@@ -218,7 +219,7 @@ plot.shrinkGPR_marg_samples_2D <- function(x, ...) {
     stop("x must be a shrinkGPR_marg_samples_2D object.")
   }
 
-  mean_surface <- t(apply(x$mean_pred, c(2, 3), mean))
+  mean_surface <- t(apply(x$mean_pred, c(2, 3), median))
 
   to_eval <- attr(x, "to_eval")
   resp_var <- attr(x, "response")
