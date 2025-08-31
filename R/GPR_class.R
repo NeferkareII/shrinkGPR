@@ -183,12 +183,12 @@ GPR_class <- nn_module(
     likelihood <- self$ldnorm(K, sigma_zk, beta)$mean()
 
     prior <- self$ltg(l2_zk, self$prior_a, self$prior_c, lam_zk)$sum(dim = 2)$mean() +
-      self$ldf(lam_zk/2, 2*self$prior_a, 2*self$prior_c)$mean() +
+      self$ldf(lam_zk, 2*self$prior_c, 2*self$prior_a)$mean() +
       self$lexp(sigma_zk, self$prior_rate)$mean()
 
     if (!self$mean_zero) {
-      prior <- prior + self$ngg(beta, self$prior_a_mean, self$prior_c_mean, lam_zk)$sum(dim = 2)$mean() +
-        self$ldf(lam_mean/2, 2*self$prior_a_mean, 2*self$prior_c_mean)$mean()
+      prior <- prior + self$ngg(beta, self$prior_a_mean, self$prior_c_mean, lam_mean)$sum(dim = 2)$mean() +
+        self$ldf(lam_mean, 2*self$prior_c_mean, 2*self$prior_a_mean)$mean()
     }
 
     var_dens <- log_det_J$mean()

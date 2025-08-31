@@ -1,3 +1,6 @@
+## Changes in Version 1.1.1:
+  - Fixed typo in prior on global shrinkage parameters
+
 ## Changes in Version 1.1:
   - Added student-t process as in Shah et al. (2014) as alternative to Gaussian process
   - Added option to estimate simulated data with multicollinearity
