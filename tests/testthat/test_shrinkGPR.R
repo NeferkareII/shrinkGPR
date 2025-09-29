@@ -50,7 +50,11 @@ test_shrinkGPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
   # Test posterior samples
   posterior <- gen_posterior_samples(res, nsamp = 100)
   expect_type(posterior, "list")
-  expect_named(posterior, c("thetas", "sigma2", "lambda"))
+  names_posterior <- c("thetas", "sigma2", "lambda")
+  if (res$model_internals$x_mean) {
+    names_posterior <- c(names_posterior, "betas", "lambda_mean")
+  }
+  expect_named(posterior, names_posterior)
   expect_equal(nrow(posterior$thetas), 100)
 
   # Test marginal generation (1D)
@@ -118,6 +122,10 @@ for (i in seq_len(nrow(scenarios))) {
       ", auto_stop: ", scenarios$auto_stop[i],
       ", toggled: ", j
     ), {
+      test_shrinkGPR(args)
+
+      # Test also with mean equation
+      args$formula_mean <- as.formula(~ x1 + x2)
       test_shrinkGPR(args)
     })
   }

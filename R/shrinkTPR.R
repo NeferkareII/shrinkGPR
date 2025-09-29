@@ -363,6 +363,7 @@ shrinkTPR <- function(formula,
     }
 
     colnames(x_mean)[colnames(x_mean) == "(Intercept)"] <- "Intercept"
+    x_mean_colnames <- colnames(x_mean)
   } else {
     x_mean <- NULL
   }
@@ -552,6 +553,7 @@ shrinkTPR <- function(formula,
       model_internals$xlevels_mean <- .getXlevels(mt_mean, mf_mean)
       model_internals$x_mean <- TRUE
       model_internals$d_mean <- x_mean$shape[2]
+      model_internals$x_mean_names <- x_mean_colnames
     } else {
       model_internals$x_mean <- FALSE
     }

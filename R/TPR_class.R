@@ -285,8 +285,15 @@ TPR_class <- nn_module(
       batch_sigma2_new <- single_eye_new$`repeat`(c(nsamp, 1, 1)) *
         sigma_zk$unsqueeze(2)$unsqueeze(2)
       v <- linalg_solve_triangular(L, K_star_t$permute(c(1, 3, 2)), upper = FALSE)
-      pred_scale <- (K_star_star - torch_matmul(v$permute(c(1, 3, 2)), v)) *
-        ((nu_zk$unsqueeze(2) + torch_mm(alpha$squeeze(3), y_demean) - 2 ) / (nu_zk + self$N - 2)$unsqueeze(2))$unsqueeze(3)
+      if (self$mean_zero) {
+        pred_scale <- (K_star_star - torch_matmul(v$permute(c(1, 3, 2)), v)) *
+          ((nu_zk$unsqueeze(2) + torch_mm(alpha$squeeze(3), y_demean) - 2 ) / (nu_zk + self$N - 2)$unsqueeze(2))$unsqueeze(3)
+
+      } else {
+        pred_scale <- (K_star_star - torch_matmul(v$permute(c(1, 3, 2)), v)) *
+          ((nu_zk$unsqueeze(2) + torch_bmm(alpha$permute(c(1, 3, 2)), y_demean)$squeeze(3) - 2 ) /
+             (nu_zk + self$N - 2)$unsqueeze(2))$unsqueeze(3)
+      }
 
       pred_nu <- nu_zk$unsqueeze(2)$unsqueeze(3) + self$N
 

@@ -387,8 +387,10 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
     stop("The argument 'nsamp' must be a positive integer.")
   }
 
-  z <- mod$model$gen_batch(nsamp)
-  zk <- mod$model(z)[[1]]
+  with_no_grad({
+    z <- mod$model$gen_batch(nsamp)
+    zk <- mod$model(z)[[1]]
+  })
 
   # Split into list containing groups of parameters
   # Convention:
@@ -412,7 +414,7 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
     res$betas <- as.matrix(zk[, (d_cov + 3):(d_cov + 2 + d_mean)])
     res$lambda_mean <- as.matrix(zk[, d_cov + 2 + d_mean + 1])
 
-    colnames(res$betas) <- paste0("beta_", attr(mod$model_internals$terms_mean, "term.labels"))
+    colnames(res$betas) <- paste0("beta_", mod$model_internals$x_mean_names)
   }
 
   if (inherits(mod, "shrinkTPR")) {

@@ -1,5 +1,6 @@
 ## Changes in Version 1.1.1:
   - Fixed typo in prior on global shrinkage parameters
+  - Fixed error when generating posterior samples with (optional) linear mean equation
 
 ## Changes in Version 1.1:
   - Added student-t process as in Shah et al. (2014) as alternative to Gaussian process
