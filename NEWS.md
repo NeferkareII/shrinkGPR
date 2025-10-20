@@ -1,6 +1,7 @@
 ## Changes in Version 1.1.1:
   - Fixed typo in prior on global shrinkage parameters
   - Fixed error when generating posterior samples with (optional) linear mean equation
+  - Wrapped JIT compilation in torch::torch_is_installed() check to avoid errors when torch is not installed
 
 ## Changes in Version 1.1:
   - Added student-t process as in Shah et al. (2014) as alternative to Gaussian process

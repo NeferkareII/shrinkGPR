@@ -45,7 +45,8 @@ https://cran.r-project.org/web/packages/torch/vignettes/installation.html"
 .shrinkGPR_internal <- new.env(parent = emptyenv())
 
 .onLoad <- function(libname, pkgname) {
-  .shrinkGPR_internal$jit_funcs <- jit_compile("
+  if (torch::torch_is_installed()) {
+    .shrinkGPR_internal$jit_funcs <- jit_compile("
 def sylvester_full(
     z: torch.Tensor,
     Q_param: torch.Tensor,
@@ -173,4 +174,5 @@ def kernel_matern_52(thetas: torch.Tensor, tau: torch.Tensor, x: torch.Tensor, x
     sqrt5 = 5.0 ** 0.5
     return (1.0 / tau.unsqueeze(1).unsqueeze(2)) * (1 + sqrt5 * D + (5.0 / 3.0) * D ** 2) * torch.exp(-sqrt5 * D)
 ")
+  }
 }
