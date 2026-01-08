@@ -7,7 +7,7 @@
 #' @name sylvester
 #' @param d An integer specifying the latent dimensionality of the input space.
 #' @param n_householder An optional integer specifying the number of Householder reflections used to orthogonalize the transformation.
-#' Defaults to \code{d - 1}.
+#' Defaults to \code{min(5, d - 1)}.
 #' @return An \code{nn_module} object representing the Sylvester normalizing flow. The module has the following key components:
 #' \itemize{
 #'   \item \code{forward(zk)}: The forward pass computes the transformed variable \code{z} and the log determinant of the Jacobian.

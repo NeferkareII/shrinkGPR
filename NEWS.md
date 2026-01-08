@@ -1,3 +1,9 @@
+## Changes in Version 1.1.2
+  - Moved to torch for R version >= 0.16.0
+  - Made training loop more numerically robust by falling back on robust Cholesky decomposition
+  - Fixed error in documentation for sylvester flows
+  - Changed base distribution to t distribution for better tail behavior 
+
 ## Changes in Version 1.1.1:
   - Fixed typo in prior on global shrinkage parameters
   - Fixed error when generating posterior samples with (optional) linear mean equation

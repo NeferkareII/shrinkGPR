@@ -99,6 +99,7 @@ def sqdist(
 
 def ldnorm(
     K: torch.Tensor,
+    L: Optional[torch.Tensor],
     sigma2: torch.Tensor,
     y: torch.Tensor,
     x_mean: Optional[torch.Tensor],
@@ -110,8 +111,15 @@ def ldnorm(
     sigma_term = I * sigma2.view(B, 1, 1)
     K_eps = K + sigma_term
 
-    L = torch.cholesky(K_eps)
-    slogdet = 2.0 * torch.sum(torch.log(torch.diagonal(L, dim1=-2, dim2=-1)), dim=1)
+    # Decide which Cholesky factor to use
+    if L is None:
+        L_local = torch.cholesky(K_eps)
+    else:
+        # Tell TorchScript that inside this block L is a Tensor, not Optional[Tensor]
+        assert L is not None
+        L_local = L
+
+    slogdet = 2.0 * torch.sum(torch.log(torch.diagonal(L_local, dim1=-2, dim2=-1)), dim=1)
 
     if (beta is not None and x_mean is not None):
         y_demean = (y - torch.matmul(x_mean, beta.transpose(0, 1))).transpose(0, 1).unsqueeze(-1)
@@ -120,7 +128,7 @@ def ldnorm(
         y_batch = y.unsqueeze(0).expand(B, N, 1)
 
 
-    alpha = torch.cholesky_solve(y_batch, L)
+    alpha = torch.cholesky_solve(y_batch, L_local)
     quad = torch.matmul(y_batch.transpose(1, 2), alpha).squeeze(-1).squeeze(-1)
 
     log_lik = -0.5 * slogdet - 0.5 * quad
@@ -128,6 +136,7 @@ def ldnorm(
 
 def ldt(
     K: torch.Tensor,
+    L: Optional[torch.Tensor],
     sigma2: torch.Tensor,
     y: torch.Tensor,
     x_mean: Optional[torch.Tensor],
@@ -140,8 +149,15 @@ def ldt(
     sigma_term = I * sigma2.view(B, 1, 1)
     K_eps = K + sigma_term
 
-    L = torch.cholesky(K_eps)
-    slogdet = 2.0 * torch.sum(torch.log(torch.diagonal(L, dim1=-2, dim2=-1)), dim=1)
+    # Decide which Cholesky factor to use
+    if L is None:
+        L_local = torch.cholesky(K_eps)
+    else:
+        # Tell TorchScript that inside this block L is a Tensor, not Optional[Tensor]
+        assert L is not None
+        L_local = L
+
+    slogdet = 2.0 * torch.sum(torch.log(torch.diagonal(L_local, dim1=-2, dim2=-1)), dim=1)
 
     if (beta is not None and x_mean is not None):
         y_demean = (y - torch.matmul(x_mean, beta.transpose(0, 1))).transpose(0, 1).unsqueeze(-1)
@@ -150,7 +166,7 @@ def ldt(
         y_batch = y.unsqueeze(0).expand(B, N, 1)
 
 
-    alpha = torch.cholesky_solve(y_batch, L)
+    alpha = torch.cholesky_solve(y_batch, L_local)
     quad = torch.matmul(y_batch.transpose(1, 2), alpha).squeeze(-1).squeeze(-1)
 
     log_lik = torch.lgamma((nu + N)*0.5) - 0.5 * N * torch.log(nu - 2) - torch.lgamma(0.5 * nu) -0.5 * slogdet - 0.5 * (nu + N) * torch.log(1 + 1/(nu - 2) * quad)

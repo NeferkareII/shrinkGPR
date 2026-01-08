@@ -87,9 +87,10 @@ TPR_class <- nn_module(
   },
 
   # Unnormalised log likelihood for Student-t Process
-  ldt = function(K, sigma2, beta, nu) {
+  ldt = function(K, L, sigma2, beta, nu) {
     log_lik <- .shrinkGPR_internal$jit_funcs$ldt(
       K = K,
+      L = L,
       sigma2 = sigma2,
       y = self$y,
       x_mean = self$x_mean,
@@ -169,11 +170,34 @@ TPR_class <- nn_module(
     return(list(zk = zk, log_det_J = log_det_J))
   },
 
+  # Function to generate data from t distribution
+  rt_torch = function(..., nu, device = "cpu", dtype = torch_float()) {
+    sample_shape <- c(...)
+
+    nu_t <- torch_scalar_tensor(nu, device = device, dtype = dtype)  # scalar
+    z <- torch_randn(!!!sample_shape, device = device, dtype = dtype)
+
+    g <- distr_gamma(
+      concentration = nu_t / 2,
+      rate = torch_scalar_tensor(0.5, device = device, dtype = dtype) # scalar
+    )
+    u <- g$sample(sample_shape = sample_shape)
+
+    # drop trailing singleton if present
+    if (u$ndim == z$ndim + 1 && u$size(u$ndim) == 1) {
+      u <- u$squeeze(-1)
+    }
+
+    z / torch_sqrt(u / nu_t)
+  },
+
   gen_batch = function(n_latent) {
     # Generate a batch of samples from the model
-    z <- torch_randn(n_latent, self$d, device = self$device)
+    # z <- torch_randn(n_latent, self$d, device = self$device)
+    z <- self$rt_torch(n_latent, self$d, nu = 2.1, device = self$device)
     return(z)
   },
+
 
   elbo = function(zk_pos, log_det_J) {
     # Extract the components of the variational distribution
@@ -199,8 +223,19 @@ TPR_class <- nn_module(
     # Calculate covariance matrix
     K <- self$kernel_func(l2_zk, lam_zk, self$x)
 
+
     # Calculate the components of the ELBO
-    likelihood <- self$ldt(K, sigma_zk, beta, nu_zk)$mean()
+    # This block uses robust chol if cholesky fails in ldt
+    tryCatch({
+      likelihood <- self$ldt(K, NULL, sigma_zk, beta, nu_zk)$mean()
+    }, error = function(ex) {
+      single_eye <- torch_eye(self$N, device = self$device)
+      batch_sigma2 <- single_eye$`repeat`(c(sigma_zk$shape[1], 1, 1)) *
+        sigma_zk$unsqueeze(2)$unsqueeze(2)
+      L <- robust_chol(K + batch_sigma2, upper = FALSE)
+
+      likelihood <<- self$ldt(K, L, sigma_zk, beta, nu_zk)$mean()
+    })
 
     prior <- self$ltg(l2_zk, self$prior_a, self$prior_c, lam_zk)$sum(dim = 2)$mean() +
       self$ldf(lam_zk/2, 2*self$prior_a, 2*self$prior_c)$mean() +

@@ -28,13 +28,13 @@ robust_chol <- function(A, tol = 1e-6, upper = FALSE) {
     # First fallback - jittering
     jitter <- tol
     sucess <- FALSE
-    while (!sucess & jitter < 1) {
+    while (!sucess & jitter < 2) {
       Lower <- linalg_cholesky_ex(A + jitter * torch_eye(A$size(2), device = A$device))
 
       if (!Lower$info$any()$item()) {
         sucess <- TRUE
       } else {
-        jitter <- jitter * 10
+        jitter <- jitter * 2
       }
     }
   }
@@ -71,16 +71,10 @@ robust_chol <- function(A, tol = 1e-6, upper = FALSE) {
 }
 
 # Prevents values from being too close to zero
-res_protector_autograd = autograd_function(
-  forward = function(ctx, x) {
-    result = torch_where(torch_abs(x) < 1e-10,
-                         torch_sign(x) * 1e-10, x)
-    return(result)
-  },
-  backward = function(ctx, grad_output) {
-    return(grad_output)
-  }
-)
+res_protector_autograd <- function(x, tol = 1e-6) {
+  torch_clamp(x, min = tol)
+}
+
 
 # Merges user and default values of named list inputs
 list_merger <- function(default, user) {
