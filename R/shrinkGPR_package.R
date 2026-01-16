@@ -58,7 +58,7 @@ def sylvester_full(
     n_householder: List[int]
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     Q_t = Q_param.transpose(0, 1)
-    norms = torch.norm(Q_t, p=2, dim=0, keepdim=True)
+    norms = torch.norm(Q_t, p=2, dim=0, keepdim=True).clamp_min(1e-8)
     V = Q_t / norms
     d = V.size(0)
     Q = torch.eye(d, device=z.device)
@@ -180,8 +180,7 @@ def make_tril(
     size_int = int(size[0])
     tril_indices = torch.tril_indices(size_int, size_int, device=x.device, offset = -1)
     A = torch.zeros(x.shape[0], size_int, size_int, device=x.device)
-    A[:, tril_indices[0], tril_indices[1]] = x[:, size_int:(size_int*(size_int+1)//2)]
-    A[:, torch.arange(size_int), torch.arange(size_int)] = x[:, :size_int]
+    A[:, tril_indices[0], tril_indices[1]] = x[:, 0:(size_int*(size_int-1)//2)]
 
     return  A
 

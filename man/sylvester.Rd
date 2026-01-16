@@ -10,7 +10,7 @@ sylvester(d, n_householder)
 \item{d}{An integer specifying the latent dimensionality of the input space.}
 
 \item{n_householder}{An optional integer specifying the number of Householder reflections used to orthogonalize the transformation.
-Defaults to \code{d - 1}.}
+Defaults to \code{min(5, d - 1)}.}
 }
 \value{
 An \code{nn_module} object representing the Sylvester normalizing flow. The module has the following key components:

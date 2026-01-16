@@ -185,8 +185,7 @@ shrinkMVGPR <- function(formula,
                         data,
                         a = 0.5,
                         c = 0.5,
-                        a_cov = 0.5,
-                        c_cov = 0.5,
+                        eta = 4,
                         sigma2_rate = 10,
                         kernel_func = kernel_se,
                         n_layers = 10,
@@ -216,8 +215,7 @@ shrinkMVGPR <- function(formula,
   to_check_numeric <- list(
     a = a,
     c = c,
-    a_cov = a_cov,
-    c_cov = c_cov,
+    eta = eta,
     sigma2_rate = sigma2_rate
   )
 
@@ -352,7 +350,7 @@ shrinkMVGPR <- function(formula,
     x <- torch_tensor(x, device = device)
 
 
-    model <- MVGPR_class(y, x,  a = a, c = c, a_cov = a_cov, c_cov = c_cov,
+    model <- MVGPR_class(y, x,  a = a, c = c, eta = eta,
                          sigma2_rate = sigma2_rate, n_layers, flow_func, flow_args_merged,
                          kernel_func = kernel_se, device)
 
@@ -414,6 +412,9 @@ shrinkMVGPR <- function(formula,
 
       # Compute gradients, i.e. backprop
       loss$backward(retain_graph = FALSE)
+
+      # Clip gradients to avoid exploding gradients
+      nn_utils_clip_grad_norm_(model$parameters, max_norm = 2)
 
       # Update parameters
       optimizer$step()

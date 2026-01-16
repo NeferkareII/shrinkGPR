@@ -28,7 +28,7 @@ robust_chol <- function(A, tol = 1e-6, upper = FALSE) {
     # First fallback - jittering
     jitter <- tol
     sucess <- FALSE
-    while (!sucess & jitter < 2) {
+    while (!sucess & jitter < 1e-2) {
       Lower <- linalg_cholesky_ex(A + jitter * torch_eye(A$size(2), device = A$device))
 
       if (!Lower$info$any()$item()) {
@@ -168,3 +168,56 @@ lty_input_bad <- function(x){
   }
 }
 
+is_correlation_matrix <- function(R, tol = 1e-8) {
+  if (!is.matrix(R)) return(FALSE)
+  if (nrow(R) != ncol(R)) return(FALSE)
+
+  # symmetry
+  if (max(abs(R - t(R))) > tol) return(FALSE)
+
+  # unit diagonal
+  if (max(abs(diag(R) - 1)) > tol) return(FALSE)
+
+  # bounds
+  if (any(R < -1 - tol | R > 1 + tol)) return(FALSE)
+
+  # positive definiteness
+  !inherits(try(chol(R), silent = TRUE), "try-error")
+}
+
+rlkjcorr <- function(n, K, eta = 1) {
+  stopifnot(is.numeric(K), K >= 2, K == as.integer(K))
+  stopifnot(all(eta > 0))
+  stopifnot(length(eta) == 1L || length(eta) == n)
+
+  alpha <- eta + (K - 2) / 2
+
+  r12 <- 2 * rbeta(n, alpha, alpha) - 1
+  R <- array(0, dim = c(K, K, n))  # upper-triangular Cholesky factor (per draw)
+
+  R[1, 1, ] <- 1
+  R[1, 2, ] <- r12
+  R[2, 2, ] <- sqrt(1 - r12^2)
+
+  if (K > 2) {
+    for (m in 2:(K - 1)) {
+      alpha <- alpha - 0.5
+      y <- rbeta(n, shape1 = m / 2, shape2 = alpha)  # length n
+
+      # n independent unit vectors in R^m: columns are draws
+      z <- matrix(rnorm(m * n), nrow = m, ncol = n)
+      z <- z / rep(sqrt(colSums(z^2)), each = m)
+
+      # fill column (m+1) for all draws
+      R[1:m, m + 1, ] <- sweep(z, 2, sqrt(y), `*`)
+      R[m + 1, m + 1, ] <- sqrt(1 - y)
+    }
+  }
+
+  # correlation matrices: for each draw i, crossprod(R[,,i]) = t(R)%*%R
+  out <- array(0, dim = c(K, K, n))
+  for (i in 1:n) out[, , i] <- crossprod(R[, , i])
+
+  if (n == 1L) out <- out[, , 1]
+  out
+}
