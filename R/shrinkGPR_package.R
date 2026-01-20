@@ -201,6 +201,43 @@ def kernel_matern_52(thetas: torch.Tensor, tau: torch.Tensor, x: torch.Tensor, x
     D = torch.sqrt(sqdist(x, thetas, x_star) + 1e-4)
     sqrt5 = 5.0 ** 0.5
     return (1.0 / tau.unsqueeze(1).unsqueeze(2)) * (1 + sqrt5 * D + (5.0 / 3.0) * D ** 2) * torch.exp(-sqrt5 * D)
+
+
+# New functions for multivariate outputs
+
+def ldnorm_multi(
+    K: torch.Tensor,
+    Omega: torch.Tensor,
+    sigma2: torch.Tensor,
+    y: torch.Tensor
+) -> torch.Tensor:
+
+    n_latent = K.size(0)
+    N = K.size(1)
+    M = Omega.size(1)
+
+    I = torch.eye(N, device=K.device).unsqueeze(0).expand(n_latent, N, N)
+    K_eps = K + I * sigma2.view(n_latent, 1, 1)
+
+    L_K = torch.cholesky(K_eps, upper=False)
+    L_Om = torch.cholesky(Omega, upper=False)
+
+    alpha = torch.cholesky_solve(y.unsqueeze(0).expand(n_latent, N, M), L_K, upper=False)
+    B = torch.bmm(y.t().unsqueeze(0).expand(n_latent, M, N), alpha)
+
+    Om_inv_B = torch.cholesky_solve(B, L_Om, upper=False)
+
+    tr = -0.5 * torch.sum(torch.diagonal(Om_inv_B, dim1=-2, dim2=-1), dim=1)
+
+    diag_K = torch.diagonal(L_K, dim1=-2, dim2=-1)
+    diag_Om = torch.diagonal(L_Om, dim1=-2, dim2=-1)
+
+    slogdet_K = 2 * torch.sum(torch.log(diag_K), dim=1)
+    slogdet_Om = 2 * torch.sum(torch.log(diag_Om), dim=1)
+
+    log_lik = -0.5 * M * slogdet_K - 0.5 * N * slogdet_Om + tr
+    return log_lik
 ")
   }
 }
+

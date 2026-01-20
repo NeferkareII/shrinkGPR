@@ -71,38 +71,45 @@ MVGPR_class <- nn_module(
 
   # Unnormalised log likelihood for MV Gaussian Process
   ldnorm = function(K, Omega, sigma2) {
-    n_latent <- K$size(1)
 
-    I <- torch_eye(self$N, device=self$device)$unsqueeze(1)$expand(c(n_latent, self$N, self$N))
-    K_eps <- K + I * sigma2$view(c(n_latent, 1, 1))
+    # Try faster JIT implementation first
+    tryCatch({
+      log_lik <- shrinkGPR:::.shrinkGPR_internal$jit_funcs$ldnorm_multi(K, Omega, sigma2, self$y)
+    }, error = function(ex) {
+      n_latent <- K$size(1)
 
-    L_K <- robust_chol(K_eps, upper = FALSE)
-    L_Om <- robust_chol(Omega, upper = FALSE)
+      I <- torch_eye(self$N, device=self$device)$unsqueeze(1)$expand(c(n_latent, self$N, self$N))
+      K_eps <- K + I * sigma2$view(c(n_latent, 1, 1))
 
-    alpha <- torch_cholesky_solve(self$y, L_K, upper = FALSE)
+      L_K <- robust_chol(K_eps, upper = FALSE)
+      L_Om <- robust_chol(Omega, upper = FALSE)
 
-    # B = Y^T K^{-1} Y
-    Yt <- self$y$t()$expand(c(n_latent, self$M, self$N))
-    B <- torch_bmm(Yt, alpha)
+      alpha <- torch_cholesky_solve(self$y$unsqueeze(1)$expand(c(n_latent, self$N, self$M)), L_K, upper = FALSE)
 
-    # Omega^{-1} B via Cholesky solve
-    Om_inv_B <- torch_cholesky_solve(B, L_Om, upper = FALSE)
+      # B = Y^T K^{-1} Y
+      Yt <- self$y$t()$expand(c(n_latent, self$M, self$N))
+      B <- torch_bmm(Yt, alpha)
 
-    tr <- -0.5 * torch_sum(torch_diagonal(Om_inv_B, dim1 = -2, dim2 = -1), dim = 2)
+      # Omega^{-1} B via Cholesky solve
+      Om_inv_B <- torch_cholesky_solve(B, L_Om, upper = FALSE)
 
-    # Calculate log determinants
-    diag_K  <- torch_diagonal(L_K,  dim1 = -2, dim2 = -1)
-    diag_Om <- torch_diagonal(L_Om, dim1 = -2, dim2 = -1)
+      tr <- -0.5 * torch_sum(torch_diagonal(Om_inv_B, dim1 = -2, dim2 = -1), dim = 2)
 
-    slogdet_K  <- 2 * torch_sum(torch_log(diag_K),  dim = 2)
-    slogdet_Om <- 2 * torch_sum(torch_log(diag_Om), dim = 2)
+      # Calculate log determinants
+      diag_K  <- torch_diagonal(L_K,  dim1 = -2, dim2 = -1)
+      diag_Om <- torch_diagonal(L_Om, dim1 = -2, dim2 = -1)
 
-    # Print all components for debugging
-    # print(sprintf("logdet K: %s", as.character(slogdet_K$mean()$item())))
-    # print(sprintf("logdet Om: %s", as.character(slogdet_Om$mean()$item())))
-    #       print(sprintf("trace term: %s", as.character(tr$mean()$item())))
+      slogdet_K  <- 2 * torch_sum(torch_log(diag_K),  dim = 2)
+      slogdet_Om <- 2 * torch_sum(torch_log(diag_Om), dim = 2)
 
-    log_lik <- -0.5 * self$M * slogdet_K - 0.5 * self$N * slogdet_Om + tr
+      # Print all components for debugging
+      # print(sprintf("logdet K: %s", as.character(slogdet_K$mean()$item())))
+      # print(sprintf("logdet Om: %s", as.character(slogdet_Om$mean()$item())))
+      #       print(sprintf("trace term: %s", as.character(tr$mean()$item())))
+
+      log_lik <<- -0.5 * self$M * slogdet_K - 0.5 * self$N * slogdet_Om + tr
+    })
+
     log_lik
   },
 
@@ -138,6 +145,7 @@ MVGPR_class <- nn_module(
 
   # Stan-style inverse transform: y (unconstrained) -> L (Cholesky of corr) and log|J|
   make_corr_chol = function(Omega_uncons) {
+
     # Omega_uncons: (n_latent, M*(M-1)/2)
     n_latent <- Omega_uncons$size(1)
 
