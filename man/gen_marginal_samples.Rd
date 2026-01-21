@@ -15,7 +15,7 @@ gen_marginal_samples(
 )
 }
 \arguments{
-\item{mod}{A \code{shrinkGPR} or \code{shrinkTPR} object representing the fitted Gaussian/t process regression model.}
+\item{mod}{A \code{shrinkGPR}, \code{shrinkTPR} or \code{shrinkMVGPR} object representing the fitted Gaussian/t process regression model.}
 
 \item{to_eval}{A character vector specifying the names of the covariates to evaluate. Can be one or two variables.}
 

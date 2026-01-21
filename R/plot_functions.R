@@ -71,6 +71,36 @@ plot.shrinkTPR <- function(x, nsamp = 1000, ...) {
   plot.shrinkGPR(x, nsamp = nsamp, ...)
 }
 
+#' Graphical summary of posterior of theta
+#'
+#' \code{plot.shrinkMVGPR} generates a boxplot visualizing the posterior distribution of
+#' \code{theta} obtained from a fitted \code{shrinkMVGPR} object.
+#'
+#' @param x a \code{shrinkTPR} object.
+#' @param nsamp a positive integer specifying the number of posterior samples to draw for plotting.
+#' The default is \code{1000}.
+#' @param ... further arguments passed to the internal \code{\link[graphics]{boxplot}} function,
+#' such as axis labeling or plotting options. By default, \code{las = 2} is used unless explicitly
+#' overridden by the user.
+#' @return Called for its side effects. Returns \code{invisible(NULL)}.
+#' @examples
+#' \donttest{
+#' # Simulate and fit a shrinkMVGPR model, then plot:
+#' sim <- simMVGPR()
+#' mod <- shrinkMVPR(cbind(y.1, y.2) ~ ., data = sim$data)
+#' plot(mod)
+#'
+#' ## Change axis label orientation
+#' plot(mod, las = 1)
+#' }
+#'
+#' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
+#' @family plotting functions
+#' @export
+plot.shrinkMVGPR <- function(x, nsamp = 1000, ...) {
+  plot.shrinkGPR(x, nsamp = nsamp, ...)
+}
+
 #' Plot method for 1D marginal predictions
 #'
 #' @description Generates a plot of 1D conditional predictive samples produced by \code{\link{gen_marginal_samples}}
@@ -125,8 +155,6 @@ plot.shrinkGPR_marg_samples_1D <- function(x, ...) {
     stop("The 'shrinkTVP' package is required for this function. Please install it with install.packages('shrinkTVP').")
   }
 
-  plot_tmp <- getFromNamespace("plot.mcmc.tvp", "shrinkTVP")
-
 
   if (!inherits(x, "shrinkGPR_marg_samples_1D")) {
     stop("x must be a shrinkGPR_marg_samples_1D object")
@@ -142,10 +170,27 @@ plot.shrinkGPR_marg_samples_1D <- function(x, ...) {
     args$ylab <- attr(x, "response")
   }
 
+  if (attr(x, "M") == 1) {
+    plot_tmp <- getFromNamespace("plot.mcmc.tvp", "shrinkTVP")
 
-  args$x <- x$mean_pred
-  attr(args$x, "index") <-  x$grid
-  do.call(plot_tmp, args)
+    args$x <- x$mean_pred
+    attr(args$x, "index") <-  x$grid
+    do.call(plot_tmp, args)
+  } else {
+    plot_tmp <- getFromNamespace("plot.shrinkTVP", "shrinkTVP")
+
+    list_resp <- list(response = lapply(1:attr(x, "M"), \(i) {
+      tmp <- x$mean_pred[,,i]
+      attr(tmp, "class") <- "mcmc.tvp"
+      attr(tmp, "index") <- x$grid
+      return(tmp)
+    }))
+
+    attr(list$response, "type") <- "sample"
+    shrinkTVP:::plot.shrinkTVP(list, pars = "response")
+  }
+
+
 
   invisible(NULL)
 }

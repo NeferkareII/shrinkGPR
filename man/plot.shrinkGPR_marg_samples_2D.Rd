@@ -66,6 +66,7 @@ p |> plotly::layout(
 Other plotting functions: 
 \code{\link{plot.shrinkGPR}()},
 \code{\link{plot.shrinkGPR_marg_samples_1D}()},
+\code{\link{plot.shrinkMVGPR}()},
 \code{\link{plot.shrinkTPR}()}
 }
 \author{

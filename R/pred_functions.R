@@ -43,12 +43,12 @@ eval_pred_dens <- function(x, mod, data_test, nsamp = 100, log = FALSE){
 
   # Check that x is numeric
   if (!is.numeric(x)) {
-    stop("The argument 'x' must be a numeric vector.")
+    stop("The argument 'x' must contain numeric values.")
   }
 
   # Check that mod is a shrinkGPR object
-  if (!class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
-    stop("The argument 'mod' must be an object of class 'shrinkGPR' or 'shrinkTPR'.")
+  if (!class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
+    stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
   }
 
   # Check that data_test is a data frame with one row
@@ -72,17 +72,25 @@ eval_pred_dens <- function(x, mod, data_test, nsamp = 100, log = FALSE){
   m <- model.frame(terms, data = data_test, xlev = mod$model_internals$xlevels)
   x_test <- torch_tensor(model.matrix(terms, m), device = device)
 
-  if (mod$model_internals$x_mean) {
-    terms_mean <- delete.response(mod$model_internals$terms_mean)
-    m_mean <- model.frame(terms_mean, data = data_test, xlev = mod$model_internals$xlevels_mean)
-    x_test_mean <- torch_tensor(model.matrix(terms_mean, m_mean), device = device)
-  } else {
-    x_test_mean <- NULL
+  if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
+    if (mod$model_internals$x_mean) {
+      terms_mean <- delete.response(mod$model_internals$terms_mean)
+      m_mean <- model.frame(terms_mean, data = data_test, xlev = mod$model_internals$xlevels_mean)
+      x_test_mean <- torch_tensor(model.matrix(terms_mean, m_mean), device = device)
+    } else {
+      x_test_mean <- NULL
+    }
+
   }
 
   x_tens <- torch_tensor(x, device = device)
 
-  res_tens <- mod$model$eval_pred_dens(x_tens, x_test, nsamp, x_test_mean, log)
+  if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
+    res_tens <- mod$model$eval_pred_dens(x_tens, x_test, nsamp, x_test_mean, log)
+  } else if (class(mod) == "shrinkMVGPR") {
+    res_tens <- mod$model$eval_pred_dens(x_tens, x_test, nsamp, log)
+  }
+
   return(as.numeric(res_tens))
 }
 
@@ -126,9 +134,10 @@ LPDS <- function(mod, data_test, nsamp = 100) {
   # Input checking for LPDS -------------------------------------------------
 
   # Check that mod is a shrinkGPR object
-  if (!class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
-    stop("The argument 'mod' must be an object of class 'shrinkGPR' or 'shrinkTPR'.")
+  if (!class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
+    stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
   }
+
   # Check that data_test is a data frame with one row
   if (!is.data.frame(data_test) || nrow(data_test) != 1) {
     stop("The argument 'data_test' must be a data frame with exactly one row.")
@@ -184,10 +193,11 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
 
   # Input checking for calc_pred_moments ------------------------------------
 
-  # Check that object is a shrinkGPR object
-  if (!class(object) %in% c("shrinkGPR", "shrinkTPR")) {
-    stop("The argument 'object' must be an object of class 'shrinkGPR' or 'shrinkTPR'.")
+  # Check that mod is a shrinkGPR object
+  if (!class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
+    stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
   }
+
 
   # Check that newdata, if provided, is a data frame
   if (!missing(newdata) && !is.data.frame(newdata)) {
@@ -209,17 +219,24 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
   m <- model.frame(terms, data = newdata, xlev = object$model_internals$xlevels)
   x_tens <- torch_tensor(model.matrix(terms, m), device = device)
 
-  if (object$model_internals$x_mean) {
-    terms_mean <- delete.response(object$model_internals$terms_mean)
-    m_mean <- model.frame(terms_mean, data = newdata, xlev = object$model_internals$xlevels_mean)
-    x_tens_mean <- torch_tensor(model.matrix(terms_mean, m_mean), device = device)
-  } else {
-    x_tens_mean <- NULL
+  if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
+    if (mod$model_internals$x_mean) {
+      terms_mean <- delete.response(mod$model_internals$terms_mean)
+      m_mean <- model.frame(terms_mean, data = data_test, xlev = mod$model_internals$xlevels_mean)
+      x_test_mean <- torch_tensor(model.matrix(terms_mean, m_mean), device = device)
+    } else {
+      x_test_mean <- NULL
+    }
+
   }
 
-  res_tens <- object$model$calc_pred_moments(x_tens, nsamp, x_tens_mean)
+  if (class(object) %in% c("shrinkGPR", "shrinkTPR")) {
+    res_tens <- object$model$calc_pred_moments(x_tens, nsamp, x_test_mean)
+  } else if (class(object) == "shrinkMVGPR") {
+    res_tens <- object$model$calc_pred_moments(x_tens, nsamp)
+  }
 
-  return(list(means = as.matrix(res_tens[[1]]),
+  return(list(means = as.array(res_tens[[1]]),
               vars = as.array(res_tens[[2]])))
 }
 
@@ -261,8 +278,8 @@ predict.shrinkGPR <- function(object, newdata, nsamp = 100, ...) {
   # Input checking for predict.shrinkGPR ------------------------------------
 
   # Check that mod is a shrinkGPR object
-  if (!class(object) %in% c("shrinkGPR", "shrinkTPR")) {
-    stop("The argument 'object' must be an object of class 'shrinkGPR' or 'shrinkTPR'.")
+  if (!class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
+    stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
   }
 
   # Check that newdata, if provided, is a data frame
@@ -285,22 +302,30 @@ predict.shrinkGPR <- function(object, newdata, nsamp = 100, ...) {
   m <- model.frame(terms, data = newdata, xlev = object$model_internals$xlevels)
   x_tens <- torch_tensor(model.matrix(terms, m), device = device)
 
-  if (object$model_internals$x_mean) {
-    terms_mean <- delete.response(object$model_internals$terms_mean)
-    m_mean <- model.frame(terms_mean, data = newdata, xlev = object$model_internals$xlevels_mean)
-    x_tens_mean <- torch_tensor(model.matrix(terms_mean, m_mean), device = device)
-  } else {
-    x_tens_mean <- NULL
+  if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
+    if (mod$model_internals$x_mean) {
+      terms_mean <- delete.response(mod$model_internals$terms_mean)
+      m_mean <- model.frame(terms_mean, data = data_test, xlev = mod$model_internals$xlevels_mean)
+      x_test_mean <- torch_tensor(model.matrix(terms_mean, m_mean), device = device)
+    } else {
+      x_test_mean <- NULL
+    }
   }
 
-  res_tens <- object$model$predict(x_tens, nsamp, x_tens_mean)
+  if (class(object) %in% c("shrinkGPR", "shrinkTPR")) {
+    res_tens <- object$model$predict(x_tens, nsamp, x_test_mean)
+    res_tens <- as.matrix(res_tens)
+  } else if (class(object) == "shrinkMVGPR") {
+    res_tens <- object$model$predict(x_tens, nsamp)
+    res_tens <- as_array(res_tens)
+  }
 
-  return(as.matrix(res_tens))
+  return(res_tens)
 }
 
 #' Generate Predictions
 #'
-#' \code{predict.shrinkTPR} generates posterior predictive samples from a fitted \code{shrinkGPR} model at specified covariates.
+#' \code{predict.shrinkTPR} generates posterior predictive samples from a fitted \code{shrinkTPR} model at specified covariates.
 #'
 #' @param object A \code{shrinkTPR} object representing the fitted Gaussian process regression model.
 #' @param newdata \emph{Optional} data frame containing the covariates for the prediction points. If missing, the training data is used.
@@ -321,7 +346,7 @@ predict.shrinkGPR <- function(object, newdata, nsamp = 100, ...) {
 #'   data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
 #'
 #'   # Fit GPR model
-#'   res <- shrinkGPR(y ~ x1 + x2, data = data)
+#'   res <- shrinkTPR(y ~ x1 + x2, data = data)
 #'   # Example usage for in-sample prediction
 #'   preds <- predict(res)
 #'
@@ -332,6 +357,45 @@ predict.shrinkGPR <- function(object, newdata, nsamp = 100, ...) {
 #' }
 #' @export
 predict.shrinkTPR <- function(object, newdata, nsamp = 100, ...) {
+  predict.shrinkGPR(object, newdata, nsamp, ...)
+}
+
+#' Generate Predictions
+#'
+#' \code{predict.shrinkMVGPR} generates posterior predictive samples from a fitted \code{shrinkMVGPR} model at specified covariates.
+#'
+#' @param object A \code{shrinkMVGPR} object representing the fitted multivariate Gaussian process regression model.
+#' @param newdata \emph{Optional} data frame containing the covariates for the prediction points. If missing, the training data is used.
+#' @param nsamp Positive integer specifying the number of posterior samples to generate. Default is 100.
+#' @param ... Currently ignored.
+#' @return A matrix containing posterior predictive samples for each covariate combination in \code{newdata}.
+#' @details
+#' This function generates predictions by sampling from the posterior predictive distribution.
+#' @examples
+#' \donttest{
+#' if (torch::torch_is_installed()) {
+#'   # Simulate data
+#'   set.seed(123)
+#'   torch::torch_manual_seed(123)
+#'   n <- 100
+#'   x <- matrix(runif(n * 2), n, 2)
+#'   y1 <- sin(2 * pi * x[, 1])
+#'   y2 <- cos(2 * pi * x[, 2])
+#'   y <- cbind(y1, y2) + matrix(rnorm(n * 2, sd = 0.1), n, 2)
+#'   data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
+#'
+#'   # Fit MVGPR model
+#'   res <- shrinkMVGPR(cbind(y.1, y.2) ~ x1 + x2, data = data)
+#'   # Example usage for in-sample prediction
+#'   preds <- predict(res)
+#'
+#'   # Example usage for out-of-sample prediction
+#'   newdata <- data.frame(x1 = runif(10), x2 = runif(10))
+#'   preds <- predict(res, newdata = newdata)
+#'   }
+#' }
+#' @export
+predict.shrinkMVGPR <- function(object, newdata, nsamp = 100, ...) {
   predict.shrinkGPR(object, newdata, nsamp, ...)
 }
 
@@ -378,8 +442,8 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
   # Input checking for gen_posterior_samples -------------------------------
 
   # Check that mod is a shrinkGPR object
-  if (!class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
-    stop("The argument 'mod' must be an object of class 'shrinkGPR' or 'shrinkTPR'.")
+  if (!class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
+    stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
   }
 
   # Check that nsamp is a positive integer
@@ -392,34 +456,67 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
     zk <- mod$model(z)[[1]]
   })
 
-  # Split into list containing groups of parameters
-  # Convention:
-  # First d_cov components are the theta parameters
-  # Next component is the sigma parameter
-  # Next component is the lambda parameter
-  # Next d_mean components are the mean parameters
-  # Last component is the lambda parameter for the mean
+  if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
+    # Split into list containing groups of parameters
+    # Convention:
+    # First d_cov components are the theta parameters
+    # Next component is the sigma parameter
+    # Next component is the lambda parameter
+    # Next d_mean components are the mean parameters
+    # Last component is the lambda parameter for the mean
 
-  d_cov <- mod$model_internals$d_cov
+    d_cov <- mod$model_internals$d_cov
 
-  res <- list(thetas = as.matrix(zk[, 1:d_cov]),
-              sigma2 = as.matrix(zk[, d_cov + 1]),
-              lambda = as.matrix(zk[, d_cov + 2]))
+    res <- list(thetas = as.matrix(zk[, 1:d_cov]),
+                sigma2 = as.matrix(zk[, d_cov + 1]),
+                lambda = as.matrix(zk[, d_cov + 2]))
 
-  colnames(res$thetas) <- paste0("theta_", attr(mod$model_internals$terms, "term.labels"))
+    colnames(res$thetas) <- paste0("theta_", attr(mod$model_internals$terms, "term.labels"))
 
 
-  if (mod$model_internals$x_mean) {
-    d_mean <- mod$model_internals$d_mean
-    res$betas <- as.matrix(zk[, (d_cov + 3):(d_cov + 2 + d_mean)])
-    res$lambda_mean <- as.matrix(zk[, d_cov + 2 + d_mean + 1])
+    if (mod$model_internals$x_mean) {
+      d_mean <- mod$model_internals$d_mean
+      res$betas <- as.matrix(zk[, (d_cov + 3):(d_cov + 2 + d_mean)])
+      res$lambda_mean <- as.matrix(zk[, d_cov + 2 + d_mean + 1])
 
-    colnames(res$betas) <- paste0("beta_", mod$model_internals$x_mean_names)
+      colnames(res$betas) <- paste0("beta_", mod$model_internals$x_mean_names)
+    }
+
+    if (inherits(mod, "shrinkTPR")) {
+      res$nu <- as.matrix(zk[, -1]) + 2
+    }
+  } else {
+    # Extract the components of the variational distribution
+    # Convention:
+    # First (M * (M - 1) / 2) - M components are the off-diagonal parameters
+    # of the cholesky factor of Omega
+    # Next d components are the theta parameters for kernel that generates K
+    # Next component is the tau parameter (glob shrinkage for theta)
+    # Next component is sigma2 parameter
+
+    d_cov <- mod$model_internals$d_cov
+    M <- mod$model_internals$M
+
+    n_unconstr <- (M * (M - 1) / 2)
+
+    # Extract off diagonal unconstrained elements and create correlation matrix
+    off_diag_unconstr <- zk[, 1:n_unconstr]
+
+    chols <- mod$model$make_corr_chol(off_diag_unconstr)[[1]]
+    Omega_mats <- as_array(torch_bmm(chols, chols$transpose(2, 3)))
+
+    r <- attr(mod$model_internals$terms, "variables")[[2]]
+    resp_names <- vapply(as.list(r)[-1], deparse, character(1))
+    dimnames(Omega_mats) <- list(NULL, resp_names, resp_names)
+
+    res <- list(thetas = as.matrix(zk[, (n_unconstr + 1):(n_unconstr + d_cov)]),
+                tau = as.matrix(zk[, n_unconstr + d_cov + 1]),
+                sigma2 = as.matrix(zk[, n_unconstr + d_cov + 2]),
+                Omega = Omega_mats)
+
+    colnames(res$thetas) <- paste0("theta_", attr(mod$model_internals$terms, "term.labels"))
   }
 
-  if (inherits(mod, "shrinkTPR")) {
-    res$nu <- as.matrix(zk[, -1]) + 2
-  }
 
   return(res)
 
@@ -434,7 +531,7 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
 #' or by using a fixed values for the remaining covariates (if \code{fixed_x} is provided). The result is a set of conditional
 #' predictions that can be used to visualize the marginal effect of the selected covariates under varying input configurations.
 #'
-#' @param mod A \code{shrinkGPR} or \code{shrinkTPR} object representing the fitted Gaussian/t process regression model.
+#' @param mod A \code{shrinkGPR}, \code{shrinkTPR} or \code{shrinkMVGPR} object representing the fitted Gaussian/t process regression model.
 #' @param to_eval A character vector specifying the names of the covariates to evaluate. Can be one or two variables.
 #' @param nsamp Positive integer specifying the number of posterior samples to generate. Default is 200.
 #' @param fixed_x \emph{optional} data frame specifying a fixed covariate configuration. If provided, this configuration is used for
@@ -486,8 +583,8 @@ gen_marginal_samples <- function(mod, to_eval, nsamp = 200, fixed_x, n_eval_poin
   # Input checking ----------------------------------------------------------
 
   # Check that mod is a supported model object
-  if (!inherits(mod, c("shrinkGPR", "shrinkTPR"))) {
-    stop("The argument 'mod' must be a 'shrinkGPR' or 'shrinkTPR' object.")
+  if (!inherits(mod, c("shrinkGPR", "shrinkTPR", "shrinkMVGPR"))) {
+    stop("The argument 'mod' must be a 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR' object.")
   }
 
   # Check that to_eval is a character vector of length 1 or 2
@@ -563,7 +660,15 @@ gen_marginal_samples <- function(mod, to_eval, nsamp = 200, fixed_x, n_eval_poin
 
     # Generate grid of points to evaluate as well as storage object for samples
     grid <- seq(eval_range[1], eval_range[2], length.out = n_eval_points)
-    samples <- matrix(NA, nrow = nsamp, ncol = n_eval_points)
+
+    # Differentiate between univariate and multivariate response
+    if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
+      M <- 1
+      samples <- matrix(NA, nrow = nsamp, ncol = n_eval_points)
+    } else if (class(mod) == "shrinkMVGPR") {
+      M <- mod$model_internals$M
+      samples <- array(NA, dim = c(nsamp, n_eval_points, M))
+    }
 
     # Set up progress bar
     if (display_progress) {
@@ -590,7 +695,13 @@ gen_marginal_samples <- function(mod, to_eval, nsamp = 200, fixed_x, n_eval_poin
       curr_data[, to_eval] <- grid
 
 
-      samples[i, ] <- calc_pred_moments(mod, newdata = curr_data, nsamp = 1)[[1]]
+      # Again, differentiate between univariate and multivariate response
+      if (class(mod) == "shrinkMVGPR") {
+        pred_moments <- calc_pred_moments(mod, newdata = curr_data, nsamp = 1)[[1]]
+        samples[i, , ] <- matrix(pred_moments, nrow = n_eval_points, ncol = M)
+      } else {
+        samples[i, ] <- calc_pred_moments(mod, newdata = curr_data, nsamp = 1)[[1]]
+      }
 
       if (display_progress) {
         pb$tick()
@@ -601,6 +712,7 @@ gen_marginal_samples <- function(mod, to_eval, nsamp = 200, fixed_x, n_eval_poin
 
     res <- list(mean_pred = samples, grid = grid)
     attr(res, "class") <- "shrinkGPR_marg_samples_1D"
+    attr(res, "M") <- M
     attr(res, "to_eval") <- to_eval
     attr(res, "response") <- as.character(mod$model_internals$terms[[2]])
 
@@ -615,7 +727,12 @@ gen_marginal_samples <- function(mod, to_eval, nsamp = 200, fixed_x, n_eval_poin
     grid2 <- seq(eval_range[[2]][1], eval_range[[2]][2], length.out = n_eval_points)
     grid_tot <- expand.grid(grid1, grid2)
 
-    samples <- array(NA, dim = c(nsamp, n_eval_points, n_eval_points))
+    if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
+      samples <- array(NA, dim = c(nsamp, n_eval_points, n_eval_points))
+    } else if (class(mod) == "shrinkMVGPR") {
+      samples <- array(NA, dim = c(nsamp, n_eval_points, n_eval_points, mod$model_internals$M))
+    }
+
 
     if (display_progress) {
       pb <- progress_bar$new(total = nsamp, format = "[:bar] :percent :eta",
@@ -642,7 +759,11 @@ gen_marginal_samples <- function(mod, to_eval, nsamp = 200, fixed_x, n_eval_poin
 
       pred_moments <- calc_pred_moments(mod, newdata = curr_data, nsamp = 1)[[1]]
 
-      samples[i, , ] <- matrix(pred_moments, nrow = n_eval_points, ncol = n_eval_points)
+      if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
+        samples[i, , ] <- matrix(pred_moments, nrow = n_eval_points, ncol = n_eval_points)
+      } else {
+        samples[i, , , ] <- array(pred_moments, dim = c(n_eval_points, n_eval_points, mod$model_internals$M))
+      }
 
       if (display_progress) {
         pb$tick()
@@ -651,6 +772,7 @@ gen_marginal_samples <- function(mod, to_eval, nsamp = 200, fixed_x, n_eval_poin
 
     res <- list(mean_pred = samples, grid = list(grid1 = grid1, grid2 = grid2))
     attr(res, "class") <- "shrinkGPR_marg_samples_2D"
+    attr(res, "M") <- M
     attr(res, "to_eval") <- to_eval
     attr(res, "response") <- as.character(mod$model_internals$terms[[2]])
 

@@ -507,7 +507,8 @@ shrinkMVGPR <- function(formula,
       terms = mt,
       xlevels = .getXlevels(mt, mf),
       data = data,
-      d_cov = x$shape[2]
+      d_cov = x$shape[2],
+      M = y$shape[2]
     )
   } else {
     model_internals <- cont_model$model_internals
@@ -522,7 +523,7 @@ shrinkMVGPR <- function(formula,
               optimizer = optimizer,
               model_internals = model_internals)
 
-  attr(res, "class") <- "shrinkGPR"
+  attr(res, "class") <- "shrinkMVGPR"
   attr(res, "device") <- device
 
   return(res)
