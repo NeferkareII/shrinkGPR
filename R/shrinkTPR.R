@@ -393,7 +393,7 @@ shrinkTPR <- function(formula,
 
     model <- TPR_class(y, x, x_mean, a = a, c = c, a_mean = a_mean, c_mean = c_mean,
                        sigma2_rate = sigma2_rate, nu_alpha = nu_alpha, nu_beta = nu_beta,
-                       n_layers, flow_func, flow_args_merged, kernel_func = kernel_se, device)
+                       n_layers, flow_func, flow_args_merged, kernel_func = kernel_func, device)
 
     # Merge user and default optim_control
     if (missing(optim_control)) optim_control <- list()

@@ -20,54 +20,55 @@ lightweight_ols <- function(y, x) {
 # Robust cholesky decomposition using torch
 # Function currently only works for batched matrices
 # If to be used for single matrices, do torch_unsqueeze(A, 1) before calling the function
-robust_chol <- function(A, tol = 1e-6, upper = FALSE) {
+robust_chol <- function(A, tol = 1e-6, upper = FALSE, jitter_max = 1.0) {
+
+  # 0) hard fail early if NaN/Inf exists
+  if (torch_isnan(A)$any()$item() || torch_isinf(A)$any()$item()) {
+    stop("robust_chol: A has NaN/Inf")
+  }
+
+  # Symmetrize first
+  A <- 0.5 * (A + A$permute(c(1, 3, 2)))
+
+  N <- A$size(2)
+  B <- A$size(1)
+  I <- torch_eye(N, device = A$device)$unsqueeze(1)$expand(c(B, N, N))
 
   Lower <- linalg_cholesky_ex(A)
 
   if (Lower$info$any()$item()) {
-    # First fallback - jittering
-    jitter <- tol
-    sucess <- FALSE
-    while (!sucess & jitter < 1e-2) {
-      Lower <- linalg_cholesky_ex(A + jitter * torch_eye(A$size(2), device = A$device))
 
-      if (!Lower$info$any()$item()) {
-        sucess <- TRUE
-      } else {
-        jitter <- jitter * 2
-      }
+    diag_mean <- torch_mean(torch_diagonal(A, dim1=2, dim2=3), dim=2)  # (B,)
+
+    jitter <- torch_full(c(B), tol, device=A$device)
+    success <- FALSE
+
+    while (!success && torch_max(jitter)$item() <= jitter_max) {
+      Aj <- A + I * (jitter * diag_mean)$view(c(-1,1,1))
+      Lower <- linalg_cholesky_ex(Aj)
+      success <- !Lower$info$any()$item()
+      jitter <- jitter * 2
     }
   }
 
   if (Lower$info$any()$item()) {
-    # Second fallback - eigen decomposition
-    eigen_result <- linalg_eigh(A)
-    evals <- eigen_result[[1]]
-    evecs <- eigen_result[[2]]
 
-    evals[evals < tol] <- tol
+    # Final fallback: compute spectrum shift WITHOUT grad, then Cholesky with grad
+    shift <- with_no_grad({
+      evals <- linalg_eigvalsh(A)                 # (B, N)
+      min_e <- torch_min(evals, dim=2)[[1]]       # (B,)
+      torch_clamp(-min_e + tol, min = 0.0)
+    })
 
-    # Reconstruct A_star
-    A_star <- torch_bmm(
-      torch_bmm(evecs, torch_diag_embed(evals, dim1 = -2, dim2 = -1)),
-      evecs$permute(c(1, 3, 2))
-    )
+    # safety factor
+    shift <- 10 * shift + tol
 
-    # Cholesky decomposition
-    Lower <- linalg_cholesky_ex(A_star)
+    Lower <- linalg_cholesky_ex(A + I * shift$view(c(-1,1,1)))
   }
 
-  # Give up and crawl into a hole
-  if (Lower$info$any()$item()) {
-    stop("Cholesky decomposition failed")
-  }
+  if (Lower$info$any()$item()) stop("Cholesky decomposition failed")
 
-
-  if (upper) {
-    return(Lower$L$permute(1, 3, 2))
-  } else {
-    return(Lower$L)
-  }
+  if (upper) Lower$L$permute(c(1, 3, 2)) else Lower$L
 }
 
 # Prevents values from being too close to zero

@@ -6,6 +6,8 @@ MVGPR_class <- nn_module(
                         a = 0.5,
                         c = 0.5,
                         eta = 4,
+                        a_Om = 0.5,
+                        c_Om = 0.5,
                         sigma2_rate = 10,
                         n_layers,
                         flow_func,
@@ -19,8 +21,8 @@ MVGPR_class <- nn_module(
     self$N <- nrow(y)
 
     # Add atttribute for latent dimension
-    # Dimension of Omega + dimension of theta + tau + sigma2
-    self$dim <- self$M * (self$M - 1) / 2 + self$d + 1 + 1
+    # Dimension of D + dimension of S-1 + dimension of theta + tau + tau_Om + sigma2
+    self$dim <- self$M * (self$M - 1) / 2 + self$M - 1 + self$d + 1 + 1 + 1
 
     # Add kernel attribute
     self$kernel_func <- kernel_func
@@ -66,28 +68,26 @@ MVGPR_class <- nn_module(
     self$prior_a <- torch_tensor(a, device = self$device, requires_grad = FALSE)
     self$prior_c <- torch_tensor(c, device = self$device, requires_grad = FALSE)
     self$prior_eta <- torch_tensor(eta, device = self$device, requires_grad = FALSE)
+    self$prior_a_Om <- torch_tensor(a_Om, device = self$device, requires_grad = FALSE)
+    self$prior_c_Om <- torch_tensor(c_Om, device = self$device, requires_grad = FALSE)
     self$prior_rate <- torch_tensor(sigma2_rate, device = self$device, requires_grad = FALSE)
   },
 
   # Unnormalised log likelihood for MV Gaussian Process
-  ldnorm = function(K, Omega, sigma2) {
+  ldnorm = function(K, L_Om, sigma2) {
     n_latent <- K$size(1)
 
     I <- torch_eye(self$N, device=self$device)$unsqueeze(1)$expand(c(n_latent, self$N, self$N))
     K_eps <- K + I * sigma2$view(c(n_latent, 1, 1))
 
     L_K <- robust_chol(K_eps, upper = FALSE)
-    L_Om <- robust_chol(Omega, upper = FALSE)
 
     alpha <- torch_cholesky_solve(self$y, L_K, upper = FALSE)
 
     # B = Y^T K^{-1} Y
     Yt <- self$y$t()$expand(c(n_latent, self$M, self$N))
-    B <- torch_bmm(Yt, alpha)
-
-    # Omega^{-1} B via Cholesky solve
+    B <- torch_bmm(Yt, alpha) # Omega^{-1} B via Cholesky solve
     Om_inv_B <- torch_cholesky_solve(B, L_Om, upper = FALSE)
-
     tr <- -0.5 * torch_sum(torch_diagonal(Om_inv_B, dim1 = -2, dim2 = -1), dim = 2)
 
     # Calculate log determinants
@@ -97,13 +97,10 @@ MVGPR_class <- nn_module(
     slogdet_K  <- 2 * torch_sum(torch_log(diag_K),  dim = 2)
     slogdet_Om <- 2 * torch_sum(torch_log(diag_Om), dim = 2)
 
-    # Print all components for debugging
-    # print(sprintf("logdet K: %s", as.character(slogdet_K$mean()$item())))
-    # print(sprintf("logdet Om: %s", as.character(slogdet_Om$mean()$item())))
-    #       print(sprintf("trace term: %s", as.character(tr$mean()$item())))
-
     log_lik <- -0.5 * self$M * slogdet_K - 0.5 * self$N * slogdet_Om + tr
     log_lik
+
+
   },
 
   # Unnormalised log density of triple gamma prior
@@ -174,7 +171,7 @@ MVGPR_class <- nn_module(
         L_row <- torch_zeros(c(n_latent, self$M), device = Omega_uncons$device)
 
         for (j in 1:(i - 1)) {
-          rem_before <- torch_clamp(rem, min = 1e-8)
+          rem_before <- torch_clamp(rem, min = 1e-3)
           val <- z_mat[, i, j] * torch_sqrt(rem_before)
           L_row[, j] <- val
           rem <- rem_before - val$pow(2)
@@ -182,7 +179,7 @@ MVGPR_class <- nn_module(
           logJ_sb <- logJ_sb + 0.5 * torch_log(rem_before)
         }
 
-        L_row[, i] <- torch_sqrt(torch_clamp(rem, min = 1e-8))
+        L_row[, i] <- torch_sqrt(torch_clamp(rem, min = 1e-3))
         L[, i, ] <- L_row
       }
     }
@@ -203,7 +200,7 @@ MVGPR_class <- nn_module(
     }
 
     # Unconstrained elements of Omega are not restrained to be positive
-    omega_comp <- self$M * (self$M - 1) / 2
+    omega_comp <- self$M * (self$M - 1) / 2 + self$M - 1
 
     # All others are positive
     log_det_J <- log_det_J + self$beta_sp * torch_sum(zk[, (omega_comp + 1):self$dim] - self$softplus(zk[, (omega_comp + 1):self$dim]), dim = 2)
@@ -222,14 +219,14 @@ MVGPR_class <- nn_module(
 
     # Specifically scale down the Omega components to push closer to identity
     # This stabilizes training, particularly in higher dimensions and early on
-    omega_comp <- self$M * (self$M - 1) / 2
-    scale_omega <- 0.2 / sqrt(omega_comp)   # tune 0.2–1.0
+    omega_comp <- self$M * (self$M - 1) / 2 + self$M - 1
+    scale_omega <- 0.2 / sqrt(omega_comp)
     z[, 1:omega_comp] <- scale_omega * z[, 1:omega_comp]
 
     theta_start <- omega_comp + 1
     theta_end <- omega_comp + self$d
     # push theta block negative so softplus(theta) starts near small values
-    z[, theta_start:theta_end] <- z[, theta_start:theta_end] - 8  # tune 6–12
+    z[, theta_start:theta_end] <- z[, theta_start:theta_end] - 8
 
     return(z)
   },
@@ -237,57 +234,82 @@ MVGPR_class <- nn_module(
   elbo = function(zk_pos, log_det_J) {
     # Extract the components of the variational distribution
     # Convention:
-    # First (self$M * (self$M - 1) / 2) - self$M components are the off-diagonal parameters
-    # of the cholesky factor of Omega
+    # First (self$M * (self$M - 1) / 2) - self$M components are the unconstrained parameters of
+    # the correlation matrix D
+    # Next M-1 are the parameters for the scale vector of Omega (matrix S)
     # Next self$d components are the theta parameters for kernel that generates K
     # Next component is the tau parameter (glob shrinkage for theta)
+    # Next component is tau_Om parameter (glob shrinkage for Omega)
     # Next component is sigma2 parameter
-    Omega_uncons <-  zk_pos[, 1:(self$M * (self$M - 1) / 2)]
-    theta_zk <- zk_pos[, (self$M * (self$M - 1) / 2 + 1):(self$M * (self$M - 1) / 2 + self$d)]
-    tau_zk <- zk_pos[, (self$M * (self$M - 1) / 2 + self$d + 1)]
-    sigma_zk <- zk_pos[, (self$M * (self$M - 1) / 2 + self$d + 2)]
+    omega_comp <- self$M * (self$M - 1) / 2 + self$M - 1
+
+    D_uncons <-  zk_pos[, 1:(self$M * (self$M - 1) / 2)]
+    S_uncons <- zk_pos[, (self$M * (self$M - 1) / 2 + 1):omega_comp]
+    theta_zk <- zk_pos[, (omega_comp + 1):(omega_comp + self$d)]
+    tau_zk <- zk_pos[, (omega_comp + self$d + 1)]
+    tau_Om_zk <- zk_pos[, (omega_comp + self$d + 2)]
+    sigma_zk <- zk_pos[, (omega_comp + self$d + 3)]
 
     # Res protector to avoid issues with 0 values
     theta_zk <- res_protector_autograd(theta_zk)
     tau_zk <- res_protector_autograd(tau_zk, tol = 1e-4)
-    sigma_zk <- res_protector_autograd(sigma_zk)
-
+    sigma_zk <- res_protector_autograd(sigma_zk, tol = 1e-4)
 
     # Calculate covariance matrix Sigma
     K <- self$kernel_func(theta_zk, tau_zk, self$x)
 
-    # Calculate correlation matrix by reconstructing from cholesky factor
-    Omega_chol_zk <- self$make_corr_chol(Omega_uncons)
-    Omega <- torch_bmm(Omega_chol_zk$L, Omega_chol_zk$L$transpose(2, 3))
+    # Calculate cholesky of correlation matrix D
+    D_chol_zk <- self$make_corr_chol(D_uncons)
 
-    eps <- max(0.05, 0.2 / self$M)
-    I_M <- torch_eye(self$M, device=self$device)$unsqueeze(1)$expand(c(theta_zk$shape[1], self$M, self$M))
-    Omega <- (1 - eps) * Omega + eps * I_M
+    # Smooth bound of S_uncons to improve stability of likelihood calculation, particularly early on and in higher dimensions
+    b <- 4
+    S_uncons_c <- b * torch_tanh(S_uncons / b)
 
+    S_M <- -torch_sum(S_uncons_c, dim=2, keepdim=TRUE)
+    S_logdiag <- torch_cat(list(S_uncons_c, S_M), dim=2)
 
-    # Calculate the components of the ELBO
-    likelihood <- self$ldnorm(K, Omega, sigma_zk)$mean()
+    S_diag <- torch_exp(S_logdiag)
+    S <- torch_diag_embed(S_diag)
 
-    # Compute log determinant term for LKJ prior
-    L_Om <- robust_chol(Omega, upper = FALSE)
+    # Calculate log determinant of smooth bound, which has two components: the exp map and the squashing from unconstrained to constrained space
+    log_det_exp <- torch_sum(S_uncons_c, dim=2)
+    log_det_squash <- torch_sum(torch_log(torch_clamp(1 / torch_cosh(S_uncons / b)$pow(2), min=1e-12)), dim=2)
+    log_det_S <- log_det_exp + log_det_squash
 
-    diag_Om <- torch_diagonal(L_Om, dim1 = 2, dim2 = 3)
-    logdet_Om <- 2 * torch_sum(torch_log(diag_Om), dim = 2)
+    # Calculate cholesky of Omega
+    L_Om <- torch_bmm(S, D_chol_zk$L)
 
-    lkj_term <- (self$prior_eta - 1) * logdet_Om
+    # Slightly bias diagonal of L_Om away from zero to improve stability of likelihood calculation
+    eps_diag <- 0.03
+    beta <- 10
+    diag <- torch_diagonal(L_Om, dim1=2, dim2=3)
+    diag2 <- eps_diag + nnf_softplus(diag - eps_diag, beta = beta)
 
+    L_Om2 <- L_Om$clone()
+    L_Om2$diagonal(dim1=2, dim2=3)$copy_(diag2)
+
+    likelihood <- self$ldnorm(K, L_Om2, sigma_zk)$mean()
+
+    diag_LD  <- torch_diagonal(D_chol_zk$L, dim1=2, dim2=3)
+
+    logdet_D <- 2 * torch_sum(torch_log(diag_LD), dim=2)
+    lkj_term <- (self$prior_eta - 1) * logdet_D
 
     # Prior on theta
     prior <- self$ltg(theta_zk, self$prior_a, self$prior_c, tau_zk)$sum(dim = 2)$mean() +
-      self$ldf(tau_zk/2, 2*self$prior_a, 2*self$prior_c)$mean() +
-      # Prior on Omega (LKJ)
+      self$ldf(tau_zk/2, 2*self$prior_c, 2*self$prior_a)$mean() +
+      # Prior on D (LKJ)
       lkj_term$mean() +
+      # Prior on S
+      self$ltg(S_diag, self$prior_a_Om, self$prior_c_Om, tau_Om_zk)$sum(dim = 2)$mean() +
+      # Prior on tau_Om
+      self$ldf(tau_Om_zk/2, 2*self$prior_c_Om, 2*self$prior_a_Om)$mean() +
       # Prior on sigma^2
       self$lexp(sigma_zk, self$prior_rate)$mean()
 
-    var_dens <- log_det_J$mean() + Omega_chol_zk$logJ$mean()
+    var_dens <- log_det_J$mean() + D_chol_zk$logJ$mean() + log_det_S$mean()
 
-    # Compute ELBO
+  # Compute ELBO
     elbo <- likelihood + prior + var_dens
 
     if (torch_isnan(elbo)$item()) {
@@ -309,20 +331,62 @@ MVGPR_class <- nn_module(
 
       # Extract the components of the variational distribution
       # Convention:
-      # First (self$M * (self$M - 1) / 2) - self$M components are the off-diagonal parameters
-      # of the cholesky factor of Omega
+      # First (self$M * (self$M - 1) / 2) - self$M components are the unconstrained parameters of
+      # the correlation matrix D
+      # Next M-1 are the parameters for the scale vector of Omega (matrix S)
       # Next self$d components are the theta parameters for kernel that generates K
       # Next component is the tau parameter (glob shrinkage for theta)
+      # Next component is tau_Om parameter (glob shrinkage for Omega)
       # Next component is sigma2 parameter
-      Omega_uncons <-  zk_pos[, 1:(self$M * (self$M - 1) / 2)]
-      theta_zk <- zk_pos[, (self$M * (self$M - 1) / 2 + 1):(self$M * (self$M - 1) / 2 + self$d)]
-      tau_zk <- zk_pos[, (self$M * (self$M - 1) / 2 + self$d + 1)]
-      sigma_zk <- zk_pos[, (self$M * (self$M - 1) / 2 + self$d + 2)]
+
+      omega_comp <- self$M * (self$M - 1) / 2 + self$M - 1
+
+      D_uncons <-  zk_pos[, 1:(self$M * (self$M - 1) / 2)]
+      S_uncons <- zk_pos[, (self$M * (self$M - 1) / 2 + 1):omega_comp]
+      theta_zk <- zk_pos[, (omega_comp + 1):(omega_comp + self$d)]
+      tau_zk <- zk_pos[, (omega_comp + self$d + 1)]
+      tau_Om_zk <- zk_pos[, (omega_comp + self$d + 2)]
+      sigma_zk <- zk_pos[, (omega_comp + self$d + 3)]
 
       # Res protector to avoid issues with 0 values
       theta_zk <- res_protector_autograd(theta_zk)
       tau_zk <- res_protector_autograd(tau_zk, tol = 1e-4)
       sigma_zk <- res_protector_autograd(sigma_zk)
+
+      # Calculate covariance matrix Sigma
+      K <- self$kernel_func(theta_zk, tau_zk, self$x)
+
+      # Calculate cholesky of correlation matrix D
+      D_chol_zk <- self$make_corr_chol(D_uncons)
+
+      # Smooth bound of S_uncons to improve stability of likelihood calculation, particularly early on and in higher dimensions
+      b <- 4
+      S_uncons_c <- b * torch_tanh(S_uncons / b)
+
+      S_M <- -torch_sum(S_uncons_c, dim=2, keepdim=TRUE)
+      S_logdiag <- torch_cat(list(S_uncons_c, S_M), dim=2)
+
+      S_diag <- torch_exp(S_logdiag)
+      S <- torch_diag_embed(S_diag)
+
+      # Calculate log determinant of smooth bound, which has two components: the exp map and the squashing from unconstrained to constrained space
+      log_det_exp <- torch_sum(S_uncons_c, dim=2)
+      log_det_squash <- torch_sum(torch_log(torch_clamp(1 / torch_cosh(S_uncons / b)$pow(2), min=1e-12)), dim=2)
+      log_det_S <- log_det_exp + log_det_squash
+
+      # Calculate cholesky of Omega
+      L_Om <- torch_bmm(S, D_chol_zk$L)
+
+      # Slightly bias diagonal of L_Om away from zero to improve stability of likelihood calculation
+      eps_diag <- 0.03
+      beta <- 10
+      diag <- torch_diagonal(L_Om, dim1=2, dim2=3)
+      diag2 <- eps_diag + nnf_softplus(diag - eps_diag, beta = beta)
+
+      L_Om2 <- L_Om$clone()
+      L_Om2$diagonal(dim1=2, dim2=3)$copy_(diag2)
+
+      Omega <- torch_bmm(L_Om2, L_Om2$permute(c(1, 3, 2)))
 
       # Calculate covariance matrix K and transform into L and alpha
       # L is the cholseky decomposition of K + sigma^2I, i.e. the covariance matrix of the GP
@@ -352,14 +416,6 @@ MVGPR_class <- nn_module(
         sigma_zk$unsqueeze(2)$unsqueeze(2)
       v <- linalg_solve_triangular(L, K_star_t$permute(c(1, 3, 2)), upper = FALSE)
       K_post <- K_star_star - torch_matmul(v$permute(c(1, 3, 2)), v) + batch_sigma2_new
-
-      # Calculate correlation matrix by reconstructing from cholesky factor
-      Omega_chol_zk <- self$make_corr_chol(Omega_uncons)
-      Omega <- torch_bmm(Omega_chol_zk$L, Omega_chol_zk$L$transpose(2, 3))
-
-      eps <- max(0.05, 0.2 / self$M)
-      I_M <- torch_eye(self$M, device=self$device)$unsqueeze(1)$expand(c(theta_zk$shape[1], self$M, self$M))
-      Omega <- (1 - eps) * Omega + eps * I_M
 
       return(list(pred_mean = pred_mean, K = K_post, Omega = Omega))
     })
@@ -437,12 +493,5 @@ MVGPR_class <- nn_module(
       return(res)
     })
 
-  },
-
-  # Method to calculate LPDS
-  LPDS = function(x_new, y_new, nsamp) {
-    res <- self$eval_pred_dens(x_new, y_new, nsamp, log = TRUE)
-    return(res)
   }
-
 )

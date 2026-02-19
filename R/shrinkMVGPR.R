@@ -186,6 +186,8 @@ shrinkMVGPR <- function(formula,
                         a = 0.5,
                         c = 0.5,
                         eta = 4,
+                        a_Om = 0.5,
+                        c_Om = 0.5,
                         sigma2_rate = 10,
                         kernel_func = kernel_se,
                         n_layers = 10,
@@ -268,7 +270,7 @@ shrinkMVGPR <- function(formula,
 
   # Check continuation model (if provided)
   if (!missing(cont_model) && !is.list(cont_model)) {
-    stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkGPR' call.")
+    stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkMVGPR' call.")
   }
 
   # Check device
@@ -288,8 +290,8 @@ shrinkMVGPR <- function(formula,
   }
 
   if (!missing(cont_model)) {
-    if (!inherits(cont_model, "shrinkGPR")) {
-      stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkGPR' call.")
+    if (!inherits(cont_model, "shrinkMVGPR")) {
+      stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkMVGPR' call.")
     }
   }
 
@@ -350,14 +352,14 @@ shrinkMVGPR <- function(formula,
     x <- torch_tensor(x, device = device)
 
 
-    model <- MVGPR_class(y, x,  a = a, c = c, eta = eta,
+    model <- MVGPR_class(y, x,  a = a, c = c, eta = eta, a_Om = a_Om, c_Om = c_Om,
                          sigma2_rate = sigma2_rate, n_layers, flow_func, flow_args_merged,
-                         kernel_func = kernel_se, device)
+                         kernel_func = kernel_func, device)
 
     # Merge user and default optim_control
     if (missing(optim_control)) optim_control <- list()
     default_optim_params <- formals(optim_adam)
-    default_optim_params$lr <- 1e-3
+    default_optim_params$lr <- 1e-4
     default_optim_params$weight_decay <- 1e-3
     default_optim_params$params <- model$parameters
     optim_control_merged <- list_merger(default_optim_params, optim_control)
@@ -388,10 +390,20 @@ shrinkMVGPR <- function(formula,
   # Number of iterations to check for significant improvement
   n_check <- 100
 
+  # Rolling window parameters for adaptive skip-step rule
+  # Rolling window size
+  w <- 50L
+  # Multiplier for MAD to set cap
+  k_mad <- 10
+  # safety floor so cap doesn't get too small early
+  cap_min <- 1e4
+
   # Initialize a variable to track whether the loop exited normally or due to interruption
   stop_reason <- "max_iterations"
   runtime <- system.time({
     # tryCatch({
+
+
     for (i in 1:n_epochs) {
 
       # Sample from base distribution
@@ -402,22 +414,49 @@ shrinkMVGPR <- function(formula,
       zk_pos <- zk_log_det_J$zk
       log_det_J <- zk_log_det_J$log_det_J
 
+
       # Calculate loss, i.e. ELBO
       # suppressWarnings because torchscript does not yet support torch.linalg.cholesky
       loss <- suppressMessages(-model$elbo(zk_pos, log_det_J))
-      loss_stor[i] <- loss$item()
+
+      loss_val <- loss$item()
+
+      # # compute adaptive cap from last w finite losses
+      # lo <- max(1L, i - w + 1L)
+      # win <- loss_stor[lo:i]
+      # win <- win[is.finite(win)]
+      #
+      # if (length(win) >= 10L) {
+      #   med <- stats::median(win)
+      #   madv <- stats::mad(win, constant = 1)
+      #   cap <- max(cap_min, med + k_mad * madv)
+      # } else {
+      #   cap <- Inf
+      # }
+
+      # skip-step rule
+      # if (is.finite(loss_val) && loss_val <= cap) {
 
       # Zero gradients
       optimizer$zero_grad()
 
       # Compute gradients, i.e. backprop
-      loss$backward(retain_graph = FALSE)
+      loss$backward()
 
       # Clip gradients to avoid exploding gradients
-      nn_utils_clip_grad_norm_(model$parameters, max_norm = 2)
+      nn_utils_clip_grad_norm_(model$parameters, max_norm = 0.5)
 
       # Update parameters
       optimizer$step()
+
+      # Store loss value
+      loss_stor[i] <- loss_val
+      # } else {
+      #   # If loss is not finite or exceeds the adaptive cap, skip the optimization step
+      #   optimizer$zero_grad()
+      #
+      #   loss_stor[i] <- loss_stor[i-1]
+      # }
 
       # Check if model is best
       if (i == 1) {

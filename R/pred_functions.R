@@ -195,7 +195,7 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
 
   # Check that mod is a shrinkGPR object
   if (!class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
-    stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
+    stop("The argument 'object' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
   }
 
 
@@ -279,7 +279,7 @@ predict.shrinkGPR <- function(object, newdata, nsamp = 100, ...) {
 
   # Check that mod is a shrinkGPR object
   if (!class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
-    stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
+    stop("The argument 'object' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
   }
 
   # Check that newdata, if provided, is a data frame
@@ -442,7 +442,7 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
   # Input checking for gen_posterior_samples -------------------------------
 
   # Check that mod is a shrinkGPR object
-  if (!class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
+  if (!class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
     stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
   }
 
@@ -488,30 +488,70 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
   } else {
     # Extract the components of the variational distribution
     # Convention:
-    # First (M * (M - 1) / 2) - M components are the off-diagonal parameters
-    # of the cholesky factor of Omega
+    # First (M * (M - 1) / 2) - M components are the unconstrained parameters of
+    # the correlation matrix D
+    # Next M-1 are the parameters for the scale vector of Omega (matrix S)
     # Next d components are the theta parameters for kernel that generates K
     # Next component is the tau parameter (glob shrinkage for theta)
+    # Next component is tau_Om parameter (glob shrinkage for Omega)
     # Next component is sigma2 parameter
 
     d_cov <- mod$model_internals$d_cov
     M <- mod$model_internals$M
 
-    n_unconstr <- (M * (M - 1) / 2)
+    omega_comp <- M * (M - 1) / 2 + M - 1
 
-    # Extract off diagonal unconstrained elements and create correlation matrix
-    off_diag_unconstr <- zk[, 1:n_unconstr]
+    D_uncons <-  zk[, 1:(M * (M - 1) / 2)]
+    S_uncons <- zk[, (M * (M - 1) / 2 + 1):omega_comp]
+    theta_zk <- zk[, (omega_comp + 1):(omega_comp + d_cov)]
+    tau_zk <- zk[, (omega_comp + d_cov + 1)]
+    tau_Om_zk <- zk[, (omega_comp + d_cov + 2)]
+    sigma_zk <- zk[, (omega_comp + d_cov + 3)]
 
-    chols <- mod$model$make_corr_chol(off_diag_unconstr)[[1]]
-    Omega_mats <- as_array(torch_bmm(chols, chols$transpose(2, 3)))
+    # Res protector to avoid issues with 0 values
+    theta_zk <- res_protector_autograd(theta_zk)
+    tau_zk <- res_protector_autograd(tau_zk, tol = 1e-4)
+    sigma_zk <- res_protector_autograd(sigma_zk)
+
+    # Calculate cholesky of correlation matrix D
+    D_chol_zk <- mod$model$make_corr_chol(D_uncons)
+
+    # Smooth bound of S_uncons to improve stability of likelihood calculation, particularly early on and in higher dimensions
+    b <- 4
+    S_uncons_c <- b * torch_tanh(S_uncons / b)
+
+    S_M <- -torch_sum(S_uncons_c, dim=2, keepdim=TRUE)
+    S_logdiag <- torch_cat(list(S_uncons_c, S_M), dim=2)
+
+    S_diag <- torch_exp(S_logdiag)
+    S <- torch_diag_embed(S_diag)
+
+    # Calculate log determinant of smooth bound, which has two components: the exp map and the squashing from unconstrained to constrained space
+    log_det_exp <- torch_sum(S_uncons_c, dim=2)
+    log_det_squash <- torch_sum(torch_log(torch_clamp(1 / torch_cosh(S_uncons / b)$pow(2), min=1e-12)), dim=2)
+    log_det_S <- log_det_exp + log_det_squash
+
+    # Calculate cholesky of Omega
+    L_Om <- torch_bmm(S, D_chol_zk$L)
+
+    # Slightly bias diagonal of L_Om away from zero to improve stability of likelihood calculation
+    eps_diag <- 0.03
+    beta <- 10
+    diag <- torch_diagonal(L_Om, dim1=2, dim2=3)
+    diag2 <- eps_diag + nnf_softplus(diag - eps_diag, beta = beta)
+
+    L_Om2 <- L_Om$clone()
+    L_Om2$diagonal(dim1=2, dim2=3)$copy_(diag2)
+    Omega_mats <- as_array(torch_bmm(L_Om2, L_Om2$transpose(2, 3)))
 
     r <- attr(mod$model_internals$terms, "variables")[[2]]
     resp_names <- vapply(as.list(r)[-1], deparse, character(1))
     dimnames(Omega_mats) <- list(NULL, resp_names, resp_names)
 
-    res <- list(thetas = as.matrix(zk[, (n_unconstr + 1):(n_unconstr + d_cov)]),
-                tau = as.matrix(zk[, n_unconstr + d_cov + 1]),
-                sigma2 = as.matrix(zk[, n_unconstr + d_cov + 2]),
+    res <- list(thetas = as.matrix(theta_zk),
+                tau = as.matrix(tau_zk),
+                sigma2 = as.matrix(sigma_zk),
+                tau_Om = as.matrix(tau_Om_zk),
                 Omega = Omega_mats)
 
     colnames(res$thetas) <- paste0("theta_", attr(mod$model_internals$terms, "term.labels"))

@@ -186,8 +186,12 @@ plot.shrinkGPR_marg_samples_1D <- function(x, ...) {
       return(tmp)
     }))
 
-    attr(list$response, "type") <- "sample"
-    shrinkTVP:::plot.shrinkTVP(list, pars = "response")
+    attr(list_resp$response, "type") <- "sample"
+
+    args$x <- list_resp
+    args$pars = "response"
+
+    do.call(plot_tmp, args)
   }
 
 
