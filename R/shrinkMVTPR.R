@@ -181,25 +181,27 @@
 #' }
 #' @export
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
-shrinkGPR <- function(formula,
-                      data,
-                      a = 0.5,
-                      c = 0.5,
-                      formula_mean,
-                      a_mean = 0.5,
-                      c_mean = 0.5,
-                      sigma2_rate = 10,
-                      kernel_func = kernel_se,
-                      n_layers = 10,
-                      n_latent = 10,
-                      flow_func = sylvester,
-                      flow_args,
-                      n_epochs = 1000,
-                      auto_stop = TRUE,
-                      cont_model,
-                      device,
-                      display_progress = TRUE,
-                      optim_control) {
+shrinkMVTPR <- function(formula,
+                        data,
+                        a = 0.5,
+                        c = 0.5,
+                        eta = 4,
+                        a_Om = 0.5,
+                        c_Om = 0.5,
+                        sigma2_rate = 10,
+                        nu_alpha = 0.5,
+                        nu_beta = 2,
+                        kernel_func = kernel_se,
+                        n_layers = 10,
+                        n_latent = 10,
+                        flow_func = sylvester,
+                        flow_args,
+                        n_epochs = 1000,
+                        auto_stop = TRUE,
+                        cont_model,
+                        device,
+                        display_progress = TRUE,
+                        optim_control) {
 
   # Input checking ----------------------------------------------------------
 
@@ -217,8 +219,7 @@ shrinkGPR <- function(formula,
   to_check_numeric <- list(
     a = a,
     c = c,
-    a_mean = a_mean,
-    c_mean = c_mean,
+    eta = eta,
     sigma2_rate = sigma2_rate
   )
 
@@ -271,7 +272,7 @@ shrinkGPR <- function(formula,
 
   # Check continuation model (if provided)
   if (!missing(cont_model) && !is.list(cont_model)) {
-    stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkGPR' call.")
+    stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkMVGPR' call.")
   }
 
   # Check device
@@ -284,11 +285,6 @@ shrinkGPR <- function(formula,
     stop("The argument 'optim_control', if provided, must be a named list.")
   }
 
-  # Check mean formula
-  if (!missing(formula_mean) && !inherits(formula_mean, "formula")) {
-    stop("The argument 'formula_mean', if provided, must be of class 'formula'.")
-  }
-
   if (!missing(device)) {
     if (!inherits(device, "torch_device")) {
       stop("The argument 'device', if provided, must be a valid 'torch_device' object.")
@@ -296,8 +292,8 @@ shrinkGPR <- function(formula,
   }
 
   if (!missing(cont_model)) {
-    if (!inherits(cont_model, "shrinkGPR")) {
-      stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkGPR' call.")
+    if (!inherits(cont_model, "shrinkMVTPR")) {
+      stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkMVTPR' call.")
     }
   }
 
@@ -339,26 +335,6 @@ shrinkGPR <- function(formula,
     stop("No NA values are allowed in covariates")
   }
 
-  # For mean equation
-  if (!missing(formula_mean)) {
-    mf_mean <- model.frame(formula = formula_mean, data = data, drop.unused.levels = TRUE, na.action = na.pass)
-    mt_mean <- attr(x = mf_mean, which = "terms")
-
-    # Create Matrix X with dummies and transformations
-    x_mean <- model.matrix(object = mt_mean, data = mf_mean)
-
-    # Check that there are no NAs in x_mean
-    if (any(is.na(x_mean))) {
-      stop("No NA values are allowed in covariates for the mean equation")
-    }
-
-    colnames(x_mean)[colnames(x_mean) == "(Intercept)"] <- "Intercept"
-    x_mean_colnames <- colnames(x_mean)
-  } else {
-    x_mean <- NULL
-  }
-
-
   if (missing(cont_model)) {
 
     # Print initializing parameters message
@@ -373,22 +349,20 @@ shrinkGPR <- function(formula,
     # d is always handled internally
     flow_args_merged$d <- NULL
 
-    # Create y, x and x_mean tensors
+    # Create y, x tensors
     y <- torch_tensor(y, device = device)
     x <- torch_tensor(x, device = device)
 
-    if (!is.null(x_mean)) {
-      x_mean <- torch_tensor(x_mean, device = device)
-    }
 
-    model <- GPR_class(y, x, x_mean, a = a, c = c, a_mean = a_mean, c_mean = c_mean,
-                       sigma2_rate = sigma2_rate, n_layers, flow_func, flow_args_merged,
-                       kernel_func = kernel_func, device)
+    model <- MVTPR_class(y, x,  a = a, c = c, eta = eta, a_Om = a_Om, c_Om = c_Om,
+                         nu_alpha = nu_alpha, nu_beta = nu_beta,
+                         sigma2_rate = sigma2_rate, n_layers, flow_func, flow_args_merged,
+                         kernel_func = kernel_func, device)
 
     # Merge user and default optim_control
     if (missing(optim_control)) optim_control <- list()
     default_optim_params <- formals(optim_adam)
-    default_optim_params$lr <- 1e-3
+    default_optim_params$lr <- 1e-4
     default_optim_params$weight_decay <- 1e-3
     default_optim_params$params <- model$parameters
     optim_control_merged <- list_merger(default_optim_params, optim_control)
@@ -419,96 +393,115 @@ shrinkGPR <- function(formula,
   # Number of iterations to check for significant improvement
   n_check <- 100
 
+  # Rolling window parameters for adaptive skip-step rule
+  # Rolling window size
+  w <- 50L
+  # Multiplier for MAD to set cap
+  k_mad <- 10
+  # safety floor so cap doesn't get too small early
+  cap_min <- 1e4
+
   # Initialize a variable to track whether the loop exited normally or due to interruption
   stop_reason <- "max_iterations"
   runtime <- system.time({
-   # tryCatch({
-      for (i in 1:n_epochs) {
-
-        # Sample from base distribution
-        z <- model$gen_batch(n_latent)
-
-        # Forward pass through model
-        zk_log_det_J <- model(z)
-        zk_pos <- zk_log_det_J$zk
-        log_det_J <- zk_log_det_J$log_det_J
-
-        # Calculate loss, i.e. ELBO
-        # suppressWarnings because torchscript does not yet support torch.linalg.cholesky
-        loss <- suppressMessages(-model$elbo(zk_pos, log_det_J))
-        loss_stor[i] <- loss$item()
-
-        # Zero gradients
-        optimizer$zero_grad()
-
-        # Compute gradients, i.e. backprop
-        loss$backward(retain_graph = FALSE)
-
-        # Update parameters
-        optimizer$step()
-
-        # Check if model is best
-        if (i == 1) {
-          best_model <- model$clone(deep = TRUE)
-          best_loss <- loss$item()
-        } else if (loss$item() < best_loss & !is.na(loss$item()) & !is.infinite(loss$item())) {
-          best_model <- model$clone(deep = TRUE)
-          best_loss <- loss$item()
-        }
+    # tryCatch({
 
 
-        # Auto stop if no improvement in n_check iterations
-        if (auto_stop &
-            i %% n_check == 0 &
-            i > (n_check - 1)) {
-          X <- 1:n_check
-          Y <- loss_stor[(i - n_check + 1):i]
-          p_val <- lightweight_ols(Y, X)
+    for (i in 1:n_epochs) {
 
-          # Slightly more lenient here, false positives are not as bad as false negatives
-          if (p_val > 0.2) {
-            stop_reason <- "auto_stop"
-            break
-          }
-        }
+      # Sample from base distribution
+      z <- model$gen_batch(n_latent)
 
-        # Update progress bar
-        if (display_progress) {
-
-          # Prepare message, this way width can be set
-          avg_loss_msg <- "Avg. loss last 50 iter.: "
-          avg_loss_width <- 7
+      # Forward pass through model
+      zk_log_det_J <- model(z)
+      zk_pos <- zk_log_det_J$zk
+      log_det_J <- zk_log_det_J$log_det_J
 
 
-          # If less than 50 iterations, don't show avg loss
-          if (i >= 50) {
+      # Calculate loss, i.e. ELBO
+      # suppressWarnings because torchscript does not yet support torch.linalg.cholesky
+      loss <- suppressMessages(-model$elbo(zk_pos, log_det_J))
 
-            # Recalculate average loss every 10 iterations
-            if (i %% 10 == 0) {
-              avg_loss <- mean(loss_stor[(i - 49):i])
-            }
+      loss_val <- loss$item()
 
-            curr_message <- paste0(avg_loss_msg,
-                                   sprintf(paste0("%-", avg_loss_width, ".2f"), avg_loss))
-          } else {
-            curr_message <- format("", width = nchar(avg_loss_msg) + avg_loss_width)
-          }
-          pb$tick(tokens = list(message = curr_message))
+
+      # Zero gradients
+      optimizer$zero_grad()
+
+      # Compute gradients, i.e. backprop
+      loss$backward()
+
+      # Clip gradients to avoid exploding gradients
+      nn_utils_clip_grad_norm_(model$parameters, max_norm = 0.5)
+
+      # Update parameters
+      optimizer$step()
+
+      # Store loss value
+      loss_stor[i] <- loss_val
+
+      # Check if model is best
+      if (i == 1) {
+        best_model <- model$clone(deep = TRUE)
+        best_loss <- loss$item()
+      } else if (loss$item() < best_loss & !is.na(loss$item()) & !is.infinite(loss$item())) {
+        best_model <- model$clone(deep = TRUE)
+        best_loss <- loss$item()
+      }
+
+
+      # Auto stop if no improvement in n_check iterations
+      if (auto_stop &
+          i %% n_check == 0 &
+          i > (n_check - 1)) {
+        X <- 1:n_check
+        Y <- loss_stor[(i - n_check + 1):i]
+        p_val <- lightweight_ols(Y, X)
+
+        # Slightly more lenient here, false positives are not as bad as false negatives
+        if (p_val > 0.2) {
+          stop_reason <- "auto_stop"
+          break
         }
       }
-  # }, interrupt = function(ex) {
-  #     stop_reason <<- "interrupted"
-  #     if (display_progress) {
-  #       pb$terminate()
-  #     }
-  #     message("\nTraining interrupted at iteration ", i, ". Returning model trained so far.")
-  #   }, error = function(ex) {
-  #     stop_reason <<- "error"
-  #     if (display_progress) {
-  #       pb$terminate()
-  #     }
-  #     message("\nError occurred at iteration ", i, ". Returning model trained so far.")
-  #   })
+
+      # Update progress bar
+      if (display_progress) {
+
+        # Prepare message, this way width can be set
+        avg_loss_msg <- "Avg. loss last 50 iter.: "
+        avg_loss_width <- 7
+
+
+        # If less than 50 iterations, don't show avg loss
+        if (i >= 50) {
+
+          # Recalculate average loss every 10 iterations
+          if (i %% 10 == 0) {
+            avg_loss <- mean(loss_stor[(i - 49):i])
+          }
+
+          curr_message <- paste0(avg_loss_msg,
+                                 sprintf(paste0("%-", avg_loss_width, ".2f"), avg_loss))
+        } else {
+          curr_message <- format("", width = nchar(avg_loss_msg) + avg_loss_width)
+        }
+        pb$tick(tokens = list(message = curr_message))
+      }
+    }
+    #   }, interrupt = function(ex) {
+    #     stop_reason <<- "interrupted"
+    #     if (display_progress) {
+    #       pb$terminate()
+    #     }
+    #     message("\nTraining interrupted at iteration ", i, ". Returning model trained so far.")
+    #   }, error = function(ex) {
+    #     stop_reason <<- "error"
+    #     if (display_progress) {
+    #       pb$terminate()
+    #     }
+    #     message("\nError occurred at iteration ", i, ". Returning model trained so far.")
+    #   })
   })
 
 
@@ -535,18 +528,9 @@ shrinkGPR <- function(formula,
       terms = mt,
       xlevels = .getXlevels(mt, mf),
       data = data,
-      d_cov = x$shape[2]
+      d_cov = x$shape[2],
+      M = y$shape[2]
     )
-
-    if (!is.null(x_mean)) {
-      model_internals$terms_mean <- mt_mean
-      model_internals$xlevels_mean <- .getXlevels(mt_mean, mf_mean)
-      model_internals$x_mean <- TRUE
-      model_internals$d_mean <- x_mean$shape[2]
-      model_internals$x_mean_names <- x_mean_colnames
-    } else {
-      model_internals$x_mean <- FALSE
-    }
   } else {
     model_internals <- cont_model$model_internals
   }
@@ -560,7 +544,7 @@ shrinkGPR <- function(formula,
               optimizer = optimizer,
               model_internals = model_internals)
 
-  attr(res, "class") <- "shrinkGPR"
+  attr(res, "class") <- c("shrinkMVGPR", "shrinkMVTPR")
   attr(res, "device") <- device
 
   return(res)

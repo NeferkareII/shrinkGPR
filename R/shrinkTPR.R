@@ -459,10 +459,10 @@ shrinkTPR <- function(formula,
 
         # Check if model is best
         if (i == 1) {
-          best_model <- model
+          best_model <- model$clone(deep = TRUE)
           best_loss <- loss$item()
         } else if (loss$item() < best_loss & !is.na(loss$item()) & !is.infinite(loss$item())) {
-          best_model <- model
+          best_model <- model$clone(deep = TRUE)
           best_loss <- loss$item()
         }
 

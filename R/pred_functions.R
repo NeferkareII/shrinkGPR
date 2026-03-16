@@ -47,7 +47,7 @@ eval_pred_dens <- function(x, mod, data_test, nsamp = 100, log = FALSE){
   }
 
   # Check that mod is a shrinkGPR object
-  if (!class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
+  if (!any(class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR"))) {
     stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
   }
 
@@ -72,7 +72,7 @@ eval_pred_dens <- function(x, mod, data_test, nsamp = 100, log = FALSE){
   m <- model.frame(terms, data = data_test, xlev = mod$model_internals$xlevels)
   x_test <- torch_tensor(model.matrix(terms, m), device = device)
 
-  if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
+  if (any(class(mod) %in% c("shrinkGPR", "shrinkTPR"))) {
     if (mod$model_internals$x_mean) {
       terms_mean <- delete.response(mod$model_internals$terms_mean)
       m_mean <- model.frame(terms_mean, data = data_test, xlev = mod$model_internals$xlevels_mean)
@@ -85,9 +85,9 @@ eval_pred_dens <- function(x, mod, data_test, nsamp = 100, log = FALSE){
 
   x_tens <- torch_tensor(x, device = device)
 
-  if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
+  if (any(class(mod) %in% c("shrinkGPR", "shrinkTPR"))) {
     res_tens <- mod$model$eval_pred_dens(x_tens, x_test, nsamp, x_test_mean, log)
-  } else if (class(mod) == "shrinkMVGPR") {
+  } else {
     res_tens <- mod$model$eval_pred_dens(x_tens, x_test, nsamp, log)
   }
 
@@ -134,7 +134,7 @@ LPDS <- function(mod, data_test, nsamp = 100) {
   # Input checking for LPDS -------------------------------------------------
 
   # Check that mod is a shrinkGPR object
-  if (!class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
+  if (!any(class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR"))) {
     stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
   }
 
@@ -194,7 +194,7 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
   # Input checking for calc_pred_moments ------------------------------------
 
   # Check that mod is a shrinkGPR object
-  if (!class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
+  if (!any(class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR"))) {
     stop("The argument 'object' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
   }
 
@@ -219,10 +219,10 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
   m <- model.frame(terms, data = newdata, xlev = object$model_internals$xlevels)
   x_tens <- torch_tensor(model.matrix(terms, m), device = device)
 
-  if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
-    if (mod$model_internals$x_mean) {
-      terms_mean <- delete.response(mod$model_internals$terms_mean)
-      m_mean <- model.frame(terms_mean, data = data_test, xlev = mod$model_internals$xlevels_mean)
+  if (any(class(object) %in% c("shrinkGPR", "shrinkTPR"))) {
+    if (object$model_internals$x_mean) {
+      terms_mean <- delete.response(object$model_internals$terms_mean)
+      m_mean <- model.frame(terms_mean, data = newdata, xlev = object$model_internals$xlevels_mean)
       x_test_mean <- torch_tensor(model.matrix(terms_mean, m_mean), device = device)
     } else {
       x_test_mean <- NULL
@@ -230,14 +230,16 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
 
   }
 
-  if (class(object) %in% c("shrinkGPR", "shrinkTPR")) {
+  if (any(class(object) %in% c("shrinkGPR", "shrinkTPR"))) {
     res_tens <- object$model$calc_pred_moments(x_tens, nsamp, x_test_mean)
-  } else if (class(object) == "shrinkMVGPR") {
+    return(list(means = as.array(res_tens[[1]]),
+                vars = as.array(res_tens[[2]])))
+  } else if ("shrinkMVGPR" %in% class(object)) {
     res_tens <- object$model$calc_pred_moments(x_tens, nsamp)
+    return(list(means = as.array(res_tens[[1]]),
+                K = as.array(res_tens[[2]]),
+                Omega = as.array(res_tens[[3]])))
   }
-
-  return(list(means = as.array(res_tens[[1]]),
-              vars = as.array(res_tens[[2]])))
 }
 
 #' Generate Predictions
@@ -278,7 +280,7 @@ predict.shrinkGPR <- function(object, newdata, nsamp = 100, ...) {
   # Input checking for predict.shrinkGPR ------------------------------------
 
   # Check that mod is a shrinkGPR object
-  if (!class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
+  if (!any(class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR"))) {
     stop("The argument 'object' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
   }
 
@@ -302,20 +304,20 @@ predict.shrinkGPR <- function(object, newdata, nsamp = 100, ...) {
   m <- model.frame(terms, data = newdata, xlev = object$model_internals$xlevels)
   x_tens <- torch_tensor(model.matrix(terms, m), device = device)
 
-  if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
-    if (mod$model_internals$x_mean) {
-      terms_mean <- delete.response(mod$model_internals$terms_mean)
-      m_mean <- model.frame(terms_mean, data = data_test, xlev = mod$model_internals$xlevels_mean)
+  if (any(class(object) %in% c("shrinkGPR", "shrinkTPR"))) {
+    if (object$model_internals$x_mean) {
+      terms_mean <- delete.response(object$model_internals$terms_mean)
+      m_mean <- model.frame(terms_mean, data = newdata, xlev = object$model_internals$xlevels_mean)
       x_test_mean <- torch_tensor(model.matrix(terms_mean, m_mean), device = device)
     } else {
       x_test_mean <- NULL
     }
   }
 
-  if (class(object) %in% c("shrinkGPR", "shrinkTPR")) {
+  if (any(class(object) %in% c("shrinkGPR", "shrinkTPR"))) {
     res_tens <- object$model$predict(x_tens, nsamp, x_test_mean)
     res_tens <- as.matrix(res_tens)
-  } else if (class(object) == "shrinkMVGPR") {
+  } else if ("shrinkMVGPR" %in% class(object)) {
     res_tens <- object$model$predict(x_tens, nsamp)
     res_tens <- as_array(res_tens)
   }
@@ -442,7 +444,7 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
   # Input checking for gen_posterior_samples -------------------------------
 
   # Check that mod is a shrinkGPR object
-  if (!class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR")) {
+  if (!any(class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR"))) {
     stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
   }
 
@@ -456,7 +458,7 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
     zk <- mod$model(z)[[1]]
   })
 
-  if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
+  if (any(class(mod) %in% c("shrinkGPR", "shrinkTPR"))) {
     # Split into list containing groups of parameters
     # Convention:
     # First d_cov components are the theta parameters
@@ -483,7 +485,7 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
     }
 
     if (inherits(mod, "shrinkTPR")) {
-      res$nu <- as.matrix(zk[, -1]) + 2
+      res$nu <- as.matrix(zk[, ncol(zk)]) + 2
     }
   } else {
     # Extract the components of the variational distribution
@@ -555,6 +557,10 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
                 Omega = Omega_mats)
 
     colnames(res$thetas) <- paste0("theta_", attr(mod$model_internals$terms, "term.labels"))
+
+    if ("shrinkMVTPR" %in% class(mod)) {
+      res$nu <- as.matrix(zk[, (omega_comp + d_cov + 4)])
+    }
   }
 
 
@@ -694,21 +700,21 @@ gen_marginal_samples <- function(mod, to_eval, nsamp = 200, fixed_x, n_eval_poin
     }
   }
 
+  # Differentiate between univariate and multivariate response
+  if (any(class(mod) %in% c("shrinkGPR", "shrinkTPR"))) {
+    M <- 1
+    samples <- matrix(NA, nrow = nsamp, ncol = n_eval_points)
+  } else {
+    M <- mod$model_internals$M
+    samples <- array(NA, dim = c(nsamp, n_eval_points, M))
+  }
+
   if (length(to_eval) == 1) {
 
     # 1D case
 
     # Generate grid of points to evaluate as well as storage object for samples
     grid <- seq(eval_range[1], eval_range[2], length.out = n_eval_points)
-
-    # Differentiate between univariate and multivariate response
-    if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
-      M <- 1
-      samples <- matrix(NA, nrow = nsamp, ncol = n_eval_points)
-    } else if (class(mod) == "shrinkMVGPR") {
-      M <- mod$model_internals$M
-      samples <- array(NA, dim = c(nsamp, n_eval_points, M))
-    }
 
     # Set up progress bar
     if (display_progress) {
@@ -736,7 +742,7 @@ gen_marginal_samples <- function(mod, to_eval, nsamp = 200, fixed_x, n_eval_poin
 
 
       # Again, differentiate between univariate and multivariate response
-      if (class(mod) == "shrinkMVGPR") {
+      if (any(class(mod) %in% "shrinkMVGPR")) {
         pred_moments <- calc_pred_moments(mod, newdata = curr_data, nsamp = 1)[[1]]
         samples[i, , ] <- matrix(pred_moments, nrow = n_eval_points, ncol = M)
       } else {
@@ -767,9 +773,9 @@ gen_marginal_samples <- function(mod, to_eval, nsamp = 200, fixed_x, n_eval_poin
     grid2 <- seq(eval_range[[2]][1], eval_range[[2]][2], length.out = n_eval_points)
     grid_tot <- expand.grid(grid1, grid2)
 
-    if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
+    if (any(class(mod) %in% c("shrinkGPR", "shrinkTPR"))) {
       samples <- array(NA, dim = c(nsamp, n_eval_points, n_eval_points))
-    } else if (class(mod) == "shrinkMVGPR") {
+    } else {
       samples <- array(NA, dim = c(nsamp, n_eval_points, n_eval_points, mod$model_internals$M))
     }
 
@@ -799,7 +805,7 @@ gen_marginal_samples <- function(mod, to_eval, nsamp = 200, fixed_x, n_eval_poin
 
       pred_moments <- calc_pred_moments(mod, newdata = curr_data, nsamp = 1)[[1]]
 
-      if (class(mod) %in% c("shrinkGPR", "shrinkTPR")) {
+      if (any(class(mod) %in% c("shrinkGPR", "shrinkTPR"))) {
         samples[i, , ] <- matrix(pred_moments, nrow = n_eval_points, ncol = n_eval_points)
       } else {
         samples[i, , , ] <- array(pred_moments, dim = c(n_eval_points, n_eval_points, mod$model_internals$M))

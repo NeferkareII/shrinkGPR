@@ -1,6 +1,6 @@
-# Create nn_module subclass that implements forward methods for GPR
-MVGPR_class <- nn_module(
-  classname = "MVGPR",
+MVTPR_class <- nn_module(
+  classname = "MVTPR",
+  inherit = MVGPR_class,
   initialize = function(y,
                         x,
                         a = 0.5,
@@ -9,20 +9,21 @@ MVGPR_class <- nn_module(
                         a_Om = 0.5,
                         c_Om = 0.5,
                         sigma2_rate = 10,
+                        nu_alpha = 0.5,
+                        nu_beta = 2,
                         n_layers,
                         flow_func,
                         flow_args,
                         kernel_func = shrinkGPR::kernel_se,
                         device) {
-
     # Add dimension attributes
     self$d <- ncol(x)
     self$M <- ncol(y)
     self$N <- nrow(y)
 
     # Add atttribute for latent dimension
-    # Dimension of D + dimension of S-1 + dimension of theta + tau + tau_Om + sigma2
-    self$dim <- self$M * (self$M - 1) / 2 + self$M - 1 + self$d + 1 + 1 + 1
+    # Dimension of D + dimension of S-1 + dimension of theta + tau + tau_Om + sigma2 + nu
+    self$dim <- self$M * (self$M - 1) / 2 + self$M - 1 + self$d + 1 + 1 + 1 + 1
 
     # Add kernel attribute
     self$kernel_func <- kernel_func
@@ -71,165 +72,63 @@ MVGPR_class <- nn_module(
     self$prior_a_Om <- torch_tensor(a_Om, device = self$device, requires_grad = FALSE)
     self$prior_c_Om <- torch_tensor(c_Om, device = self$device, requires_grad = FALSE)
     self$prior_rate <- torch_tensor(sigma2_rate, device = self$device, requires_grad = FALSE)
+
+    # For prior on nu
+    self$nu_alpha <- torch_tensor(nu_alpha, device = self$device, requires_grad = FALSE)
+    self$nu_beta <- torch_tensor(nu_beta, device = self$device, requires_grad = FALSE)
   },
 
-  # Unnormalised log likelihood for MV Gaussian Process
-  ldnorm = function(K, L_Om, sigma2) {
+  ldg = function(x, alpha, beta) {
+    res <- (alpha - 1.0) * torch_log(x) - beta * x
+    return(res)
+  },
+
+  ldt = function(K, L_Om, sigma2, nu) {
     n_latent <- K$size(1)
 
-    I <- torch_eye(self$N, device=self$device)$unsqueeze(1)$expand(c(n_latent, self$N, self$N))
-    K_eps <- K + I * sigma2$view(c(n_latent, 1, 1))
-
+      I_N  <- torch_eye(self$N, device=self$device)$unsqueeze(1)$expand(c(n_latent, self$N, self$N))
+    K_eps <- K + I_N * sigma2$view(c(n_latent, 1, 1))
     L_K <- robust_chol(K_eps, upper = FALSE)
 
-    alpha <- torch_cholesky_solve(self$y, L_K, upper = FALSE)
+    # Expand Y for batching: (n_latent, N, M)
+    Y <- self$y$unsqueeze(1)$expand(c(n_latent, self$N, self$M))
+    Yt <- Y$transpose(-2, -1)
 
-    # B = Y^T K^{-1} Y
-    Yt <- self$y$t()$expand(c(n_latent, self$M, self$N))
-    B <- torch_bmm(Yt, alpha) # Omega^{-1} B via Cholesky solve
-    Om_inv_B <- torch_cholesky_solve(B, L_Om, upper = FALSE)
-    tr <- -0.5 * torch_sum(torch_diagonal(Om_inv_B, dim1 = -2, dim2 = -1), dim = 2)
+    # B = Y^T K^{-1} Y via cholesky_solve
+    alpha <- torch_cholesky_solve(Y, L_K, upper = FALSE)
+    B <- torch_bmm(Yt, alpha)
 
-    # Calculate log determinants
+    # X = L_Om^{-1} B
+    X <- linalg_solve_triangular(L_Om, B, upper = FALSE, left = TRUE)
+
+    # C = X L_Om^{-T}  <=>  C (L_Om^T) = X  (right-side triangular solve)
+    C <- linalg_solve_triangular(L_Om$transpose(-2, -1), X, upper = TRUE, left = FALSE)
+
+    # logdet(I + C)
+    I_M <- torch_eye(self$M, device=self$device)$unsqueeze(1)$expand(c(n_latent, self$M, self$M))
+    L_Iplus <- robust_chol(I_M + C, upper = FALSE)
+    diag_LI <- torch_diagonal(L_Iplus, dim1 = -2, dim2 = -1)
+    ld_Iplus <- 2 * torch_sum(torch_log(diag_LI), dim = 2)
+
+    # logdet(K) and logdet(Omega) from Cholesky factors
     diag_K  <- torch_diagonal(L_K,  dim1 = -2, dim2 = -1)
     diag_Om <- torch_diagonal(L_Om, dim1 = -2, dim2 = -1)
+    ld_K  <- 2 * torch_sum(torch_log(diag_K),  dim = 2)
+    ld_Om <- 2 * torch_sum(torch_log(diag_Om), dim = 2)
 
-    slogdet_K  <- 2 * torch_sum(torch_log(diag_K),  dim = 2)
-    slogdet_Om <- 2 * torch_sum(torch_log(diag_Om), dim = 2)
+    # NLL
+    nll <- 0.5 * (nu + self$N + self$M - 1) * ld_Iplus +
+      0.5 * self$M * ld_K +
+      0.5 * self$N * ld_Om +
+      ( torch_mvlgamma(0.5 * (nu + self$N - 1), self$N) -
+          torch_mvlgamma(0.5 * (nu + self$N + self$M - 1), self$N) )
 
-    log_lik <- -0.5 * self$M * slogdet_K - 0.5 * self$N * slogdet_Om + tr
-    log_lik
-
+    # Return log-likelihood
+    -nll
 
   },
 
-  # Unnormalised log density of triple gamma prior
-  ltg = function(x, a, c, lam) {
-    res <-  0.5 * torch_log(lam$unsqueeze(2)) -
-      0.5 * torch_log(x) +
-      log_hyperu(c + 0.5, 1.5 - a, a* x/(4.0 * c) * lam$unsqueeze(2))
 
-    return(res)
-  },
-
-  # Unnormalised log density of normal-gamma-gamma prior
-  ngg = function(x, a, c, lam) {
-    res <- 0.5 * torch_log(lam$unsqueeze(2)) +
-      log_hyperu(c + 0.5, 1.5 - a,  a * x$pow(2)/(4.0 * c) * lam$unsqueeze(2))
-
-    return(res)
-  },
-
-  # Unnormalised log density of exponential distribution
-  lexp = function(x, rate) {
-    return(torch_log(rate) - rate * x)
-  },
-
-  # Unnormalised log density of F distribution
-  ldf = function(x, d1, d2) {
-    res <- (d1 * 0.5 - 1.0) * torch_log(x) - (d1 + d2) * 0.5 *
-      torch_log1p(d1 / d2 * x)
-
-    return(res)
-  },
-
-  # Stan-style inverse transform: y (unconstrained) -> L (Cholesky of corr) and log|J|
-  make_corr_chol = function(Omega_uncons) {
-
-    # Omega_uncons: (n_latent, M*(M-1)/2)
-    n_latent <- Omega_uncons$size(1)
-
-    # z = tanh(Omega_uncons) in (-1, 1)
-    pOmega <- self$M * (self$M - 1) / 2
-    temp <- 2 + 4 * sqrt(log(pOmega))
-    u <- Omega_uncons / temp
-    z_vec <- torch_tanh(u)
-
-
-    # Pack z_vec into strictly-lower-triangular matrix z_mat, filled by row
-    z_mat <-  .shrinkGPR_internal$jit_funcs$make_tril(z_vec, self$M)
-
-    L <- torch_zeros(c(n_latent, self$M, self$M), device = Omega_uncons$device)
-
-    L_row <- torch_zeros(c(n_latent, self$M), device = Omega_uncons$device)
-    L_row[, 1] <- 1
-    L[, 1, ] <- L_row
-
-    # Jacobian pieces:
-    # 1) tanh part: sum log(1/cosh(Omega_uncons)^2) = -2 * sum log cosh(Omega_uncons)
-    # Stable logcosh(Omega_uncons) = log( exp(Omega_uncons)+exp(-Omega_uncons) ) - log(2)
-    log2 <- torch_log(torch_tensor(2.0, device = Omega_uncons$device))
-    logcosh <- torch_logaddexp(u, -u) - log2
-    logJ_tanh <- -2.0 * torch_sum(logcosh, dim = 2) - pOmega * torch_log(torch_tensor(temp, device = Omega_uncons$device))
-
-    # 2) stick-breaking part: 0.5 * sum_{i>j} log(rem_{i,j})
-    logJ_sb <- torch_zeros(c(n_latent), device = Omega_uncons$device)
-
-    if (self$M >= 2) {
-      for (i in 2:self$M) {
-        rem <- torch_ones(c(n_latent), device = Omega_uncons$device)
-        L_row <- torch_zeros(c(n_latent, self$M), device = Omega_uncons$device)
-
-        for (j in 1:(i - 1)) {
-          rem_before <- torch_clamp(rem, min = 1e-3)
-          val <- z_mat[, i, j] * torch_sqrt(rem_before)
-          L_row[, j] <- val
-          rem <- rem_before - val$pow(2)
-
-          logJ_sb <- logJ_sb + 0.5 * torch_log(rem_before)
-        }
-
-        L_row[, i] <- torch_sqrt(torch_clamp(rem, min = 1e-3))
-        L[, i, ] <- L_row
-      }
-    }
-
-    logJ <- logJ_tanh + logJ_sb
-    return(list(L = L, logJ = logJ))
-  },
-
-
-  # Forward method for MVGPR
-  forward = function(zk) {
-    log_det_J <- 0
-
-    for (layer in 1:self$n_layers) {
-      layer_out <- self$layers[[layer]]$forward(zk)
-      log_det_J <- log_det_J + layer_out$log_diag_j
-      zk <- layer_out$zk
-    }
-
-    # Unconstrained elements of Omega are not restrained to be positive
-    omega_comp <- self$M * (self$M - 1) / 2 + self$M - 1
-
-    # All others are positive
-    log_det_J <- log_det_J + self$beta_sp * torch_sum(zk[, (omega_comp + 1):self$dim] - self$softplus(zk[, (omega_comp + 1):self$dim]), dim = 2)
-    non_omega <- self$softplus(zk[, (omega_comp + 1):self$dim])
-
-    zk <- torch_cat(list(zk[, 1:omega_comp],
-                         non_omega),
-                    dim = 2)
-
-    return(list(zk = zk, log_det_J = log_det_J))
-  },
-
-  gen_batch = function(n_latent) {
-    # Generate a batch of samples from the model
-    z <- torch_randn(n_latent, self$dim, device = self$device)
-
-    # Specifically scale down the Omega components to push closer to identity
-    # This stabilizes training, particularly in higher dimensions and early on
-    omega_comp <- self$M * (self$M - 1) / 2 + self$M - 1
-    scale_omega <- 0.2 / sqrt(omega_comp)
-    z[, 1:omega_comp] <- scale_omega * z[, 1:omega_comp]
-
-    theta_start <- omega_comp + 1
-    theta_end <- omega_comp + self$d
-    # push theta block negative so softplus(theta) starts near small values
-    z[, theta_start:theta_end] <- z[, theta_start:theta_end] - 8
-
-    return(z)
-  },
 
   elbo = function(zk_pos, log_det_J) {
     # Extract the components of the variational distribution
@@ -241,6 +140,7 @@ MVGPR_class <- nn_module(
     # Next component is the tau parameter (glob shrinkage for theta)
     # Next component is tau_Om parameter (glob shrinkage for Omega)
     # Next component is sigma2 parameter
+    # Next component is nu parameter
     omega_comp <- self$M * (self$M - 1) / 2 + self$M - 1
 
     D_uncons <-  zk_pos[, 1:(self$M * (self$M - 1) / 2)]
@@ -249,6 +149,7 @@ MVGPR_class <- nn_module(
     tau_zk <- zk_pos[, (omega_comp + self$d + 1)]
     tau_Om_zk <- zk_pos[, (omega_comp + self$d + 2)]
     sigma_zk <- zk_pos[, (omega_comp + self$d + 3)]
+    nu_zk <- zk_pos[, (omega_comp + self$d + 4)]
 
     # Res protector to avoid issues with 0 values
     theta_zk <- res_protector_autograd(theta_zk)
@@ -288,7 +189,7 @@ MVGPR_class <- nn_module(
     L_Om2 <- L_Om$clone()
     L_Om2$diagonal(dim1=2, dim2=3)$copy_(diag2)
 
-    likelihood <- self$ldnorm(K, L_Om2, sigma_zk)$mean()
+    likelihood <- self$ldt(K, L_Om2, sigma_zk, nu_zk)$mean()
 
     diag_LD  <- torch_diagonal(D_chol_zk$L, dim1=2, dim2=3)
 
@@ -305,7 +206,9 @@ MVGPR_class <- nn_module(
       # Prior on tau_Om
       self$ldf(tau_Om_zk/2, 2*self$prior_c_Om, 2*self$prior_a_Om)$mean() +
       # Prior on sigma^2
-      self$lexp(sigma_zk, self$prior_rate)$mean()
+      self$lexp(sigma_zk, self$prior_rate)$mean() +
+      # Prior on nu
+      self$ldg(nu_zk, self$nu_alpha, self$nu_beta)$mean()
 
     var_dens <- log_det_J$mean() + D_chol_zk$logJ$mean() + log_det_S$mean()
 
@@ -319,7 +222,6 @@ MVGPR_class <- nn_module(
     return(elbo)
   },
 
-  # Method to calculate moments of predictive distribution
   calc_pred_moments = function(x_new, nsamp) {
 
     with_no_grad({
@@ -338,6 +240,7 @@ MVGPR_class <- nn_module(
       # Next component is the tau parameter (glob shrinkage for theta)
       # Next component is tau_Om parameter (glob shrinkage for Omega)
       # Next component is sigma2 parameter
+      # Next component is nu parameter
 
       omega_comp <- self$M * (self$M - 1) / 2 + self$M - 1
 
@@ -347,6 +250,7 @@ MVGPR_class <- nn_module(
       tau_zk <- zk_pos[, (omega_comp + self$d + 1)]
       tau_Om_zk <- zk_pos[, (omega_comp + self$d + 2)]
       sigma_zk <- zk_pos[, (omega_comp + self$d + 3)]
+      nu_zk <- zk_pos[, (omega_comp + self$d + 4)]
 
       # Res protector to avoid issues with 0 values
       theta_zk <- res_protector_autograd(theta_zk)
@@ -369,11 +273,6 @@ MVGPR_class <- nn_module(
       S_diag <- torch_exp(S_logdiag)
       S <- torch_diag_embed(S_diag)
 
-      # Calculate log determinant of smooth bound, which has two components: the exp map and the squashing from unconstrained to constrained space
-      log_det_exp <- torch_sum(S_uncons_c, dim=2)
-      log_det_squash <- torch_sum(torch_log(torch_clamp(1 / torch_cosh(S_uncons / b)$pow(2), min=1e-12)), dim=2)
-      log_det_S <- log_det_exp + log_det_squash
-
       # Calculate cholesky of Omega
       L_Om <- torch_bmm(S, D_chol_zk$L)
 
@@ -385,9 +284,10 @@ MVGPR_class <- nn_module(
 
       L_Om2 <- L_Om$clone()
       L_Om2$diagonal(dim1=2, dim2=3)$copy_(diag2)
+
       Omega <- torch_bmm(L_Om2, L_Om2$permute(c(1, 3, 2)))
 
-      # Transform covariance matrix K and transform into L and alpha
+      # Transform covariance matrix K into L and alpha
       # L is the cholseky decomposition of K + sigma^2I, i.e. the covariance matrix of the GP
       # alpha is the solution to L L^T alpha = y, i.e. (K + sigma^2I)^{-1}y
       single_eye <- torch_eye(self$N, device = self$device)
@@ -414,7 +314,10 @@ MVGPR_class <- nn_module(
       v <- linalg_solve_triangular(L, K_star_t$permute(c(1, 3, 2)), upper = FALSE)
       K_post <- K_star_star - torch_matmul(v$permute(c(1, 3, 2)), v) + batch_sigma2_new
 
-      return(list(pred_mean = pred_mean, K = K_post, Omega = Omega))
+      Omega_hat <- Omega + torch_bmm(self$y$t()$unsqueeze(1)$expand(c(nsamp, self$M, self$N)), alpha)
+      nu_hat <- nu_zk + self$N
+
+      return(list(pred_mean = pred_mean, K = K_post, Omega = Omega_hat, nu = nu_hat))
     })
   },
 
@@ -428,21 +331,28 @@ MVGPR_class <- nn_module(
       pred_mean <- pred_moments$pred_mean
       pred_K <- pred_moments$K
       pred_Omega <- pred_moments$Omega
+      pred_nu <- pred_moments$nu
 
       L_S <- robust_chol(pred_K)
-      L_Om <- robust_chol(pred_Omega)
-
-      # Slightly bias diagonal of L_Om away from zero to improve stability of likelihood calculation
-      eps_diag <- 0.03
-      beta <- 10
-      diag <- torch_diagonal(L_Om, dim1=2, dim2=3)
-      diag2 <- eps_diag + nnf_softplus(diag - eps_diag, beta = beta)
-
-      L_Om2 <- L_Om$clone()
-      L_Om2$diagonal(dim1=2, dim2=3)$copy_(diag2)
 
       Z <- torch_randn(c(nsamp, N_new, self$M), device=self$device)
-      pred_samples <- pred_mean + torch_bmm(torch_bmm(L_S, Z), L_Om2$permute(c(1, 3, 2)))
+
+      # Posterior degrees of freedom: nu_hat = nu + N
+      nu_hat <- pred_nu
+
+      # Sample g ~ Gamma(nu_hat/2, nu_hat/2) per draw, so E[g] = 1
+      # Then w = 1/g gives the inverse-chi-squared scaling
+      # sqrt(w) applied to the Gaussian draws produces matrix-t samples
+      g <- distr_gamma(
+        concentration = (nu_hat / 2)$view(c(-1)),
+        rate = torch_tensor(0.5, device = self$device)
+      )$sample()
+
+      w <- (1 / g)$view(c(-1, 1, 1))
+
+      L_Om <- robust_chol(pred_Omega)
+      pred_samples <- pred_mean +
+        torch_sqrt(w) * torch_bmm(torch_bmm(L_S, Z), L_Om$permute(c(1, 3, 2)))
 
       return(pred_samples)
     })
@@ -460,29 +370,47 @@ MVGPR_class <- nn_module(
       pred_mean <- pred_moments$pred_mean
       pred_K <- pred_moments$K
       pred_Omega <- pred_moments$Omega
-
-
+      pred_nu <- pred_moments$nu
 
       # Build diff for all y's and all draws:
       diff <- y_new - pred_mean
 
+      L_K <- robust_chol(pred_K, upper = FALSE)
       L_Om <- robust_chol(pred_Omega, upper = FALSE)
 
-      X <- linalg_solve_triangular(L_Om, diff$permute(c(1,3,2)), upper = FALSE)
+      # Expand diff for batching: (n_latent, n_eval, M)
+      Y <- diff$expand(c(nsamp, n_eval, M))
+      Yt <- Y$transpose(-2, -1)
 
-      quad_omega <- torch_sum(X$pow(2), dim = 2)
-      quad <- quad_omega / pred_K$squeeze(3)
+      # B = Y^T K^{-1} Y via cholesky_solve
+      alpha <- torch_cholesky_solve(Y, L_K, upper = FALSE)
+      B <- torch_bmm(Yt, alpha)
 
-      L_K <- robust_chol(pred_K, upper = FALSE)
+      # C = L_Om^{-1} B L_Om^{-T}
+      X <- linalg_solve_triangular(L_Om, B, upper = FALSE, left = TRUE)
+      C <- linalg_solve_triangular(L_Om$transpose(-2, -1), X, upper = TRUE, left = FALSE)
 
-      # Compute log determinant
-      diag_L_Om <- torch_diagonal(L_Om, dim1 = 2, dim2 = 3)
-      logdet_Om <- 2 * torch_log(diag_L_Om)$sum(dim = 2)
+      # logdet(I + C)
+      I_M <- torch_eye(M, device = self$device)$unsqueeze(1)$expand(c(nsamp, M, M))
+      L_Iplus <- robust_chol(I_M + C, upper = FALSE)
+      diag_LI <- torch_diagonal(L_Iplus, dim1 = -2, dim2 = -1)
+      ld_Iplus <- 2 * torch_sum(torch_log(diag_LI), dim = 2)
 
-      logdet_K <- M * torch_log(pred_K)
+      # logdet(K) and logdet(Omega) from Cholesky factors
+      diag_K  <- torch_diagonal(L_K,  dim1 = -2, dim2 = -1)
+      diag_Om <- torch_diagonal(L_Om, dim1 = -2, dim2 = -1)
+      ld_K  <- 2 * torch_sum(torch_log(diag_K),  dim = 2)
+      ld_Om <- 2 * torch_sum(torch_log(diag_Om), dim = 2)
 
+      # NLL
+      nll <- 0.5 * (pred_nu + n_eval + M - 1) * ld_Iplus +
+        0.5 * M * ld_K +
+        0.5 * n_eval * ld_Om +
+        0.5 * n_eval * M * log(pi) +
+        ( torch_mvlgamma(0.5 * (pred_nu + n_eval - 1), n_eval) -
+            torch_mvlgamma(0.5 * (pred_nu + n_eval + M - 1), n_eval) )
 
-      log_comp <- -0.5 * (quad + M * log(2 * pi) + logdet_K$squeeze(3) + logdet_Om$unsqueeze(2))
+      log_comp <- -nll
 
       m <- torch_max(log_comp, dim = 1)[[1]]
       res <- m + torch_log(torch_mean(torch_exp(log_comp - m$unsqueeze(1)), dim = 1))
@@ -493,6 +421,6 @@ MVGPR_class <- nn_module(
 
       return(res)
     })
-
   }
 )
+
