@@ -55,6 +55,7 @@ plot.shrinkGPR <- function(x, nsamp = 1000, ...) {
 #' @return Called for its side effects. Returns \code{invisible(NULL)}.
 #' @examples
 #' \donttest{
+#'if (torch::torch_is_installed()) {
 #' # Simulate and fit a shrinkTPR model, then plot:
 #' sim <- simGPR()
 #' mod <- shrinkTPR(y ~ ., data = sim$data)
@@ -93,6 +94,7 @@ plot.shrinkTPR <- function(x, nsamp = 1000, ...) {
 #'
 #' @examples
 #' \donttest{
+#'if (torch::torch_is_installed()) {
 #' # Simulate data
 #' set.seed(123)
 #' torch::torch_manual_seed(123)
@@ -174,6 +176,7 @@ plot.shrinkGPR_marg_samples_1D <- function(x, ...) {
 #'
 #' @examples
 #' \donttest{
+#'if (torch::torch_is_installed()) {
 #' # Simulate data
 #' set.seed(123)
 #' torch::torch_manual_seed(123)
