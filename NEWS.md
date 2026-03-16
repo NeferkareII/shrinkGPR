@@ -6,6 +6,7 @@
   - Made training loop more numerically robust by falling back on robust Cholesky decomposition
   - Fixed error in documentation for sylvester flows
   - Changed base distribution to t distribution for better tail behavior 
+  - Fixed issues on CRAN with examples being run when torch is not installed
 
 ## Changes in Version 1.1.1:
   - Fixed typo in prior on global shrinkage parameters
