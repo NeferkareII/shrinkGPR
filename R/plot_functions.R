@@ -12,6 +12,7 @@
 #' @return Called for its side effects. Returns \code{invisible(NULL)}.
 #' @examples
 #' \donttest{
+# 'if (torch::torch_is_installed()) {
 #' # Simulate and fit a shrinkGPR model, then plot:
 #' sim <- simGPR()
 #' mod <- shrinkGPR(y ~ ., data = sim$data)

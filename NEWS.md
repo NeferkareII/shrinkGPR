@@ -1,3 +1,6 @@
+## Changes in Version 1.1.3
+  - Fixed issues on CRAN with examples being run when torch is not installed 
+
 ## Changes in Version 1.1.2
   - Moved to torch for R version >= 0.16.0
   - Made training loop more numerically robust by falling back on robust Cholesky decomposition
