@@ -79,10 +79,6 @@ sylvester <- nn_module(
 
     self$triu_mask <- nn_buffer(triu_mask)
     self$identity <- nn_buffer(identity)
-
-    self$register_buffer("triu_mask", triu_mask)
-    self$register_buffer("eye", identity)
-
   },
 
   der_tanh = function(x) {

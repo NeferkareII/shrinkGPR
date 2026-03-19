@@ -61,21 +61,20 @@ MVTPR_class <- nn_module(
     self$model <- nn_sequential(self$layers)
 
     # Add data to the model
-    # Unsqueezing y to add a dimension - this enables broadcasting
-    self$y <- y$to(device = self$device)
-    self$x <- x$to(device = self$device)
+    self$y <- nn_buffer(y$to(device = self$device))
+    self$x <- nn_buffer(x$to(device = self$device))
 
-    #create holders for prior a, c, lam and rate
-    self$prior_a <- torch_tensor(a, device = self$device, requires_grad = FALSE)
-    self$prior_c <- torch_tensor(c, device = self$device, requires_grad = FALSE)
-    self$prior_eta <- torch_tensor(eta, device = self$device, requires_grad = FALSE)
-    self$prior_a_Om <- torch_tensor(a_Om, device = self$device, requires_grad = FALSE)
-    self$prior_c_Om <- torch_tensor(c_Om, device = self$device, requires_grad = FALSE)
-    self$prior_rate <- torch_tensor(sigma2_rate, device = self$device, requires_grad = FALSE)
+    # #create holders for prior a, c, lam and rate
+    self$prior_a <- nn_buffer(torch_tensor(a, device = self$device, requires_grad = FALSE))
+    self$prior_c <- nn_buffer(torch_tensor(c, device = self$device, requires_grad = FALSE))
+    self$prior_eta <- nn_buffer(torch_tensor(eta, device = self$device, requires_grad = FALSE))
+    self$prior_a_Om <- nn_buffer(torch_tensor(a_Om, device = self$device, requires_grad = FALSE))
+    self$prior_c_Om <- nn_buffer(torch_tensor(c_Om, device = self$device, requires_grad = FALSE))
+    self$prior_rate <- nn_buffer(torch_tensor(sigma2_rate, device = self$device, requires_grad = FALSE))
 
     # For prior on nu
-    self$nu_alpha <- torch_tensor(nu_alpha, device = self$device, requires_grad = FALSE)
-    self$nu_beta <- torch_tensor(nu_beta, device = self$device, requires_grad = FALSE)
+    self$nu_alpha <- nn_buffer(torch_tensor(nu_alpha, device = self$device, requires_grad = FALSE))
+    self$nu_beta <- nn_buffer(torch_tensor(nu_beta, device = self$device, requires_grad = FALSE))
   },
 
   ldg = function(x, alpha, beta) {

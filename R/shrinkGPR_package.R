@@ -10,7 +10,7 @@
 #'
 #' @importFrom methods formalArgs
 #'
-#' @importFrom utils packageVersion getFromNamespace
+#' @importFrom utils packageVersion getFromNamespace zip unzip
 #'
 #' @importFrom graphics boxplot
 #'
@@ -82,20 +82,12 @@ def sqdist(
     thetas: torch.Tensor,
     x_star: Optional[torch.Tensor]
 ) -> torch.Tensor:
-
-    X_thetas = x.unsqueeze(2) * torch.sqrt(thetas.transpose(0, 1))
-    sq = torch.sum(X_thetas ** 2, dim=1, keepdim=True)
-
+    x_scaled = x.unsqueeze(0) * torch.sqrt(thetas.unsqueeze(1))
     if x_star is None:
-        sqdist = ((sq + sq.permute(1, 0, 2)).permute(2, 0, 1) -
-          2 * torch.bmm(X_thetas.permute(2, 0, 1), X_thetas.permute(2, 1, 0)))
+        return torch.cdist(x_scaled, x_scaled, p=2.0).pow(2)
     else:
-        X_star_thetas = x_star.unsqueeze(2) * torch.sqrt(thetas.transpose(0, 1))
-        sq_star = torch.sum(X_star_thetas ** 2, dim=1, keepdim=True)
-        sqdist = ((sq_star + sq.permute(1, 0, 2)).permute(2, 0, 1) -
-          2 * torch.bmm(X_star_thetas.permute(2, 0, 1), X_thetas.permute(2, 1, 0)))
-
-    return sqdist
+        x_star_scaled = x_star.unsqueeze(0) * torch.sqrt(thetas.unsqueeze(1))
+        return torch.cdist(x_star_scaled, x_scaled, p=2.0).pow(2)
 
 def ldnorm(
     K: torch.Tensor,
@@ -206,36 +198,29 @@ def kernel_matern_52(thetas: torch.Tensor, tau: torch.Tensor, x: torch.Tensor, x
 # New functions for multivariate outputs
 
 def ldnorm_multi(
-    K: torch.Tensor,
-    Omega: torch.Tensor,
-    sigma2: torch.Tensor,
-    y: torch.Tensor
+    L_K: torch.Tensor,
+    L_Om: torch.Tensor,
+    y: torch.Tensor,
+    M: List[int],
+    N: List[int]
 ) -> torch.Tensor:
+    n_latent = L_K.size(0)
+    M_int = M[0]
+    N_int = N[0]
 
-    n_latent = K.size(0)
-    N = K.size(1)
-    M = Omega.size(1)
-
-    I = torch.eye(N, device=K.device).unsqueeze(0).expand(n_latent, N, N)
-    K_eps = K + I * sigma2.view(n_latent, 1, 1)
-
-    L_K = torch.cholesky(K_eps, upper=False)
-    L_Om = torch.cholesky(Omega, upper=False)
-
-    alpha = torch.cholesky_solve(y.unsqueeze(0).expand(n_latent, N, M), L_K, upper=False)
-    B = torch.bmm(y.t().unsqueeze(0).expand(n_latent, M, N), alpha)
-
+    alpha = torch.cholesky_solve(y.unsqueeze(0).expand(n_latent, N_int, M_int), L_K, upper=False)
+    Yt = y.t().unsqueeze(0).expand(n_latent, M_int, N_int)
+    B = torch.bmm(Yt, alpha)
     Om_inv_B = torch.cholesky_solve(B, L_Om, upper=False)
-
     tr = -0.5 * torch.sum(torch.diagonal(Om_inv_B, dim1=-2, dim2=-1), dim=1)
 
     diag_K = torch.diagonal(L_K, dim1=-2, dim2=-1)
     diag_Om = torch.diagonal(L_Om, dim1=-2, dim2=-1)
 
-    slogdet_K = 2 * torch.sum(torch.log(diag_K), dim=1)
-    slogdet_Om = 2 * torch.sum(torch.log(diag_Om), dim=1)
+    slogdet_K = 2.0 * torch.sum(torch.log(diag_K), dim=1)
+    slogdet_Om = 2.0 * torch.sum(torch.log(diag_Om), dim=1)
 
-    log_lik = -0.5 * M * slogdet_K - 0.5 * N * slogdet_Om + tr
+    log_lik = -0.5 * float(M_int) * slogdet_K - 0.5 * float(N_int) * slogdet_Om + tr
     return log_lik
 ")
   }

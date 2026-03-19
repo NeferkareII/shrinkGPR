@@ -12,16 +12,16 @@
 #' @return Called for its side effects. Returns \code{invisible(NULL)}.
 #' @examples
 #' \donttest{
-# 'if (torch::torch_is_installed()) {
-#' # Simulate and fit a shrinkGPR model, then plot:
-#' sim <- simGPR()
-#' mod <- shrinkGPR(y ~ ., data = sim$data)
-#' plot(mod)
+#' if (torch::torch_is_installed()) {
+#'  # Simulate and fit a shrinkGPR model, then plot:
+#'  sim <- simGPR()
+#'  mod <- shrinkGPR(y ~ ., data = sim$data)
+#'  plot(mod)
 #'
-#' ## Change axis label orientation
-#' plot(mod, las = 1)
+#'  ## Change axis label orientation
+#'  plot(mod, las = 1)
+#'  }
 #' }
-#'
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
 #' @family plotting functions
 #' @export
@@ -56,16 +56,16 @@ plot.shrinkGPR <- function(x, nsamp = 1000, ...) {
 #' @return Called for its side effects. Returns \code{invisible(NULL)}.
 #' @examples
 #' \donttest{
-#'if (torch::torch_is_installed()) {
-#' # Simulate and fit a shrinkTPR model, then plot:
-#' sim <- simGPR()
-#' mod <- shrinkTPR(y ~ ., data = sim$data)
-#' plot(mod)
+#'  if (torch::torch_is_installed()) {
+#'  # Simulate and fit a shrinkTPR model, then plot:
+#'  sim <- simGPR()
+#'  mod <- shrinkTPR(y ~ ., data = sim$data)
+#'  plot(mod)
 #'
-#' ## Change axis label orientation
-#' plot(mod, las = 1)
+#'  ## Change axis label orientation
+#'  plot(mod, las = 1)
+#'  }
 #' }
-#'
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
 #' @family plotting functions
 #' @export
@@ -87,6 +87,7 @@ plot.shrinkTPR <- function(x, nsamp = 1000, ...) {
 #' @return Called for its side effects. Returns \code{invisible(NULL)}.
 #' @examples
 #' \donttest{
+#' if (torch::torch_is_installed()) {
 #' # Simulate and fit a shrinkMVGPR model, then plot:
 #' sim <- simMVGPR()
 #' mod <- shrinkMVPR(cbind(y.1, y.2) ~ ., data = sim$data)
@@ -94,6 +95,7 @@ plot.shrinkTPR <- function(x, nsamp = 1000, ...) {
 #'
 #' ## Change axis label orientation
 #' plot(mod, las = 1)
+#' }
 #' }
 #'
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
@@ -147,6 +149,7 @@ plot.shrinkMVGPR <- function(x, nsamp = 1000, ...) {
 #'
 #' # Customize plot appearance (see plot.mcmc.tvp from shrinkTVP package for more options)
 #' plot(marginal_samps_x2, shaded = FALSE, quantlines = TRUE, quantcol = "red")
+#'}
 #'}
 #'
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
@@ -257,6 +260,7 @@ plot.shrinkGPR_marg_samples_1D <- function(x, ...) {
 #'     zaxis = list(title = "Expected value")
 #'   )
 #' )
+#'}
 #'}
 #'
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}

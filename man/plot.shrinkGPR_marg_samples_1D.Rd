@@ -29,6 +29,7 @@ Note: The \pkg{shrinkTVP} package must be installed to use this function.
 }
 \examples{
 \donttest{
+if (torch::torch_is_installed()) {
 # Simulate data
 set.seed(123)
 torch::torch_manual_seed(123)
@@ -50,6 +51,7 @@ plot(marginal_samps_x2)
 
 # Customize plot appearance (see plot.mcmc.tvp from shrinkTVP package for more options)
 plot(marginal_samps_x2, shaded = FALSE, quantlines = TRUE, quantcol = "red")
+}
 }
 
 }

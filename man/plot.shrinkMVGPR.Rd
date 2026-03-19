@@ -25,6 +25,7 @@ Called for its side effects. Returns \code{invisible(NULL)}.
 }
 \examples{
 \donttest{
+if (torch::torch_is_installed()) {
 # Simulate and fit a shrinkMVGPR model, then plot:
 sim <- simMVGPR()
 mod <- shrinkMVPR(cbind(y.1, y.2) ~ ., data = sim$data)
@@ -32,6 +33,7 @@ plot(mod)
 
 ## Change axis label orientation
 plot(mod, las = 1)
+}
 }
 
 }

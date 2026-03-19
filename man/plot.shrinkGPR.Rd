@@ -25,15 +25,16 @@ Called for its side effects. Returns \code{invisible(NULL)}.
 }
 \examples{
 \donttest{
-# Simulate and fit a shrinkGPR model, then plot:
-sim <- simGPR()
-mod <- shrinkGPR(y ~ ., data = sim$data)
-plot(mod)
+if (torch::torch_is_installed()) {
+ # Simulate and fit a shrinkGPR model, then plot:
+ sim <- simGPR()
+ mod <- shrinkGPR(y ~ ., data = sim$data)
+ plot(mod)
 
-## Change axis label orientation
-plot(mod, las = 1)
+ ## Change axis label orientation
+ plot(mod, las = 1)
+ }
 }
-
 }
 \seealso{
 Other plotting functions: 

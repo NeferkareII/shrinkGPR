@@ -54,54 +54,31 @@ MVGPR_class <- nn_module(
 
     self$layers$to(device = self$device)
 
-    # self$parameters <- 1/sqrt(n_layers) * self$parameters
-
     # Create forward method
     self$model <- nn_sequential(self$layers)
 
     # Add data to the model
-    # Unsqueezing y to add a dimension - this enables broadcasting
-    self$y <- y$to(device = self$device)
-    self$x <- x$to(device = self$device)
+    self$y <- nn_buffer(y$to(device = self$device))
+    self$x <- nn_buffer(x$to(device = self$device))
 
-    #create holders for prior a, c, lam and rate
-    self$prior_a <- torch_tensor(a, device = self$device, requires_grad = FALSE)
-    self$prior_c <- torch_tensor(c, device = self$device, requires_grad = FALSE)
-    self$prior_eta <- torch_tensor(eta, device = self$device, requires_grad = FALSE)
-    self$prior_a_Om <- torch_tensor(a_Om, device = self$device, requires_grad = FALSE)
-    self$prior_c_Om <- torch_tensor(c_Om, device = self$device, requires_grad = FALSE)
-    self$prior_rate <- torch_tensor(sigma2_rate, device = self$device, requires_grad = FALSE)
+    # #create holders for prior a, c, lam and rate
+    self$prior_a <- nn_buffer(torch_tensor(a, device = self$device, requires_grad = FALSE))
+    self$prior_c <- nn_buffer(torch_tensor(c, device = self$device, requires_grad = FALSE))
+    self$prior_eta <- nn_buffer(torch_tensor(eta, device = self$device, requires_grad = FALSE))
+    self$prior_a_Om <- nn_buffer(torch_tensor(a_Om, device = self$device, requires_grad = FALSE))
+    self$prior_c_Om <- nn_buffer(torch_tensor(c_Om, device = self$device, requires_grad = FALSE))
+    self$prior_rate <- nn_buffer(torch_tensor(sigma2_rate, device = self$device, requires_grad = FALSE))
   },
 
   # Unnormalised log likelihood for MV Gaussian Process
   ldnorm = function(K, L_Om, sigma2) {
     n_latent <- K$size(1)
-
     I <- torch_eye(self$N, device=self$device)$unsqueeze(1)$expand(c(n_latent, self$N, self$N))
     K_eps <- K + I * sigma2$view(c(n_latent, 1, 1))
-
     L_K <- robust_chol(K_eps, upper = FALSE)
-
-    alpha <- torch_cholesky_solve(self$y, L_K, upper = FALSE)
-
-    # B = Y^T K^{-1} Y
-    Yt <- self$y$t()$expand(c(n_latent, self$M, self$N))
-    B <- torch_bmm(Yt, alpha) # Omega^{-1} B via Cholesky solve
-    Om_inv_B <- torch_cholesky_solve(B, L_Om, upper = FALSE)
-    tr <- -0.5 * torch_sum(torch_diagonal(Om_inv_B, dim1 = -2, dim2 = -1), dim = 2)
-
-    # Calculate log determinants
-    diag_K  <- torch_diagonal(L_K,  dim1 = -2, dim2 = -1)
-    diag_Om <- torch_diagonal(L_Om, dim1 = -2, dim2 = -1)
-
-    slogdet_K  <- 2 * torch_sum(torch_log(diag_K),  dim = 2)
-    slogdet_Om <- 2 * torch_sum(torch_log(diag_Om), dim = 2)
-
-    log_lik <- -0.5 * self$M * slogdet_K - 0.5 * self$N * slogdet_Om + tr
-    log_lik
-
-
-  },
+    .shrinkGPR_internal$jit_funcs$ldnorm_multi(L_K, L_Om, self$y, as.integer(self$M), as.integer(self$N))
+  }
+  ,
 
   # Unnormalised log density of triple gamma prior
   ltg = function(x, a, c, lam) {
@@ -144,7 +121,6 @@ MVGPR_class <- nn_module(
     temp <- 2 + 4 * sqrt(log(pOmega))
     u <- Omega_uncons / temp
     z_vec <- torch_tanh(u)
-
 
     # Pack z_vec into strictly-lower-triangular matrix z_mat, filled by row
     z_mat <-  .shrinkGPR_internal$jit_funcs$make_tril(z_vec, self$M)
@@ -257,6 +233,11 @@ MVGPR_class <- nn_module(
 
     # Calculate covariance matrix Sigma
     K <- self$kernel_func(theta_zk, tau_zk, self$x)
+    if (torch_isnan(K$mean())$item()) {
+      cat(sprintf("K is NaN. Check components:\ntheta_zk: %g\ntau_zk: %g\n",
+                  theta_zk$mean()$item(), tau_zk$mean()$item()))
+      stop("K is NaN")
+    }
 
     # Calculate cholesky of correlation matrix D
     D_chol_zk <- self$make_corr_chol(D_uncons)
@@ -288,7 +269,12 @@ MVGPR_class <- nn_module(
     L_Om2 <- L_Om$clone()
     L_Om2$diagonal(dim1=2, dim2=3)$copy_(diag2)
 
+
+
     likelihood <- self$ldnorm(K, L_Om2, sigma_zk)$mean()
+    if (torch_isnan(likelihood)$item()) {
+      stop("Likelihood is NaN")
+    }
 
     diag_LD  <- torch_diagonal(D_chol_zk$L, dim1=2, dim2=3)
 

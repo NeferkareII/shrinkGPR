@@ -62,21 +62,20 @@ GPR_class <- nn_module(
     self$model <- nn_sequential(self$layers)
 
     # Add data to the model
-    # Unsqueezing y to add a dimension - this enables broadcasting
-    self$y <- y$to(device = self$device)$unsqueeze(2)
-    self$x <- x$to(device = self$device)
+    self$y <- nn_buffer(y$unsqueeze(2)$to(device = self$device))
+    self$x <- nn_buffer(x$to(device = self$device))
     if (!self$mean_zero) {
-      self$x_mean <- x_mean$to(device = self$device)
+      self$x_mean <- nn_buffer(x_mean$to(device = self$device))
     } else {
       self$x_mean <- NULL
     }
 
-    #create holders for prior a, c, lam and rate
-    self$prior_a <- torch_tensor(a, device = self$device, requires_grad = FALSE)
-    self$prior_c <- torch_tensor(c, device = self$device, requires_grad = FALSE)
-    self$prior_a_mean <- torch_tensor(a_mean, device = self$device, requires_grad = FALSE)
-    self$prior_c_mean <- torch_tensor(c_mean, device = self$device, requires_grad = FALSE)
-    self$prior_rate <- torch_tensor(sigma2_rate, device = self$device, requires_grad = FALSE)
+    # #create holders for prior a, c, lam and rate
+    self$prior_a <- nn_buffer(torch_tensor(a, device = self$device, requires_grad = FALSE))
+    self$prior_c <- nn_buffer(torch_tensor(c, device = self$device, requires_grad = FALSE))
+    self$prior_a_mean <- nn_buffer(torch_tensor(a_mean, device = self$device, requires_grad = FALSE))
+    self$prior_c_mean <- nn_buffer(torch_tensor(c_mean, device = self$device, requires_grad = FALSE))
+    self$prior_rate <- nn_buffer(torch_tensor(sigma2_rate, device = self$device, requires_grad = FALSE))
   },
 
   # Unnormalised log likelihood for Gaussian Process

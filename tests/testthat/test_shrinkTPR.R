@@ -92,6 +92,21 @@ test_shrinkTPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
   if (res$model_internals$x_mean) {
     expect_true(all(c("betas", "lambda_mean") %in% names(posterior)))
   }
+
+  # Test saving and loading
+  save_shrinkGPR(res, file = "test_shrinkGPR.pt")
+  res2 <- load_shrinkGPR("test_shrinkGPR.pt")
+
+  # Test that loaded model can be used for further training
+  args$cont_model <- res2
+  res3 <- do.call(shrinkTPR, args)
+
+  # Check that res3 is a shrinkTPR object and has the expected structure
+  expect_s3_class(res3, "shrinkTPR")
+  expect_true("shrinkTPR" %in% class(res3))
+
+  # Clean up saved file
+  file.remove("test_shrinkGPR.pt")
 }
 
 # Define scenarios

@@ -27,6 +27,7 @@ Note: The \pkg{plotly} package must be installed to use this function.
 }
 \examples{
 \donttest{
+if (torch::torch_is_installed()) {
 # Simulate data
 set.seed(123)
 torch::torch_manual_seed(123)
@@ -57,6 +58,7 @@ p |> plotly::layout(
     zaxis = list(title = "Expected value")
   )
 )
+}
 }
 
 }

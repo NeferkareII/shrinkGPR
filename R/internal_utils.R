@@ -20,54 +20,46 @@ lightweight_ols <- function(y, x) {
 # Robust cholesky decomposition using torch
 # Function currently only works for batched matrices
 # If to be used for single matrices, do torch_unsqueeze(A, 1) before calling the function
-robust_chol <- function(A, tol = 1e-6, upper = FALSE, jitter_max = 1.0) {
-
-  # 0) hard fail early if NaN/Inf exists
-  if (torch_isnan(A)$any()$item() || torch_isinf(A)$any()$item()) {
-    stop("robust_chol: A has NaN/Inf")
-  }
-
-  # Symmetrize first
+robust_chol <- function(A, tol = 1e-6, upper = FALSE) {
   A <- 0.5 * (A + A$permute(c(1, 3, 2)))
-
   N <- A$size(2)
   B <- A$size(1)
-  I <- torch_eye(N, device = A$device)$unsqueeze(1)$expand(c(B, N, N))
 
+  # Fast path for well-conditioned matrices
   Lower <- linalg_cholesky_ex(A)
-
-  if (Lower$info$any()$item()) {
-
-    diag_mean <- torch_mean(torch_diagonal(A, dim1=2, dim2=3), dim=2)  # (B,)
-
-    jitter <- torch_full(c(B), tol, device=A$device)
-    success <- FALSE
-
-    while (!success && torch_max(jitter)$item() <= jitter_max) {
-      Aj <- A + I * (jitter * diag_mean)$view(c(-1,1,1))
-      Lower <- linalg_cholesky_ex(Aj)
-      success <- !Lower$info$any()$item()
-      jitter <- jitter * 2
-    }
+  if (!Lower$info$any()$item()) {
+    return(if (upper) Lower$L$permute(c(1, 3, 2)) else Lower$L)
   }
 
+  # Quick jitter: 3 attempts with aggressive jumps
+  I <- torch_eye(N, device = A$device)$unsqueeze(1)$expand(c(B, N, N))
+  diag_mean <- torch_mean(torch_diagonal(A, dim1 = 2, dim2 = 3), dim = 2)
+  jitter <- tol
+
+  for (i in 1:3) {
+    Lower <- linalg_cholesky_ex(A + I * (jitter * diag_mean)$view(c(-1, 1, 1)))
+    if (!Lower$info$any()$item()) {
+      return(if (upper) Lower$L$permute(c(1, 3, 2)) else Lower$L)
+    }
+    jitter <- jitter * 100
+  }
+
+  # Eigenvalue fallback with tight safety margin
+  shift <- with_no_grad({
+    evals <- linalg_eigvalsh(A)
+    min_e <- torch_min(evals, dim = 2)[[1]]
+    torch_clamp(-min_e + tol, min = 0.0)
+  })
+  shift <- 1.1 * shift + tol
+  Lower <- linalg_cholesky_ex(A + I * shift$view(c(-1, 1, 1)))
+
+  # Float32 eigvals may be imprecise, one more aggressive attempt
   if (Lower$info$any()$item()) {
-
-    # Final fallback: compute spectrum shift WITHOUT grad, then Cholesky with grad
-    shift <- with_no_grad({
-      evals <- linalg_eigvalsh(A)                 # (B, N)
-      min_e <- torch_min(evals, dim=2)[[1]]       # (B,)
-      torch_clamp(-min_e + tol, min = 0.0)
-    })
-
-    # safety factor
-    shift <- 10 * shift + tol
-
-    Lower <- linalg_cholesky_ex(A + I * shift$view(c(-1,1,1)))
+    shift <- 2.0 * shift + 1e-3
+    Lower <- linalg_cholesky_ex(A + I * shift$view(c(-1, 1, 1)))
   }
 
   if (Lower$info$any()$item()) stop("Cholesky decomposition failed")
-
   if (upper) Lower$L$permute(c(1, 3, 2)) else Lower$L
 }
 
