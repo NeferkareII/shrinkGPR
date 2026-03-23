@@ -197,19 +197,20 @@ MVTPR_class <- nn_module(
 
     # Prior on theta
     prior <- self$ltg(theta_zk, self$prior_a, self$prior_c, tau_zk)$sum(dim = 2)$mean() +
-      self$ldf(tau_zk/2, 2*self$prior_c, 2*self$prior_a)$mean() +
+      self$ldf(tau_zk, 2*self$prior_c, 2*self$prior_a)$mean() +
       # Prior on D (LKJ)
       lkj_term$mean() +
       # Prior on S
       self$ltg(S_diag, self$prior_a_Om, self$prior_c_Om, tau_Om_zk)$sum(dim = 2)$mean() +
       # Prior on tau_Om
-      self$ldf(tau_Om_zk/2, 2*self$prior_c_Om, 2*self$prior_a_Om)$mean() +
+      self$ldf(tau_Om_zk, 2*self$prior_c_Om, 2*self$prior_a_Om)$mean() +
       # Prior on sigma^2
       self$lexp(sigma_zk, self$prior_rate)$mean() +
       # Prior on nu
       self$ldg(nu_zk, self$nu_alpha, self$nu_beta)$mean()
 
-    var_dens <- log_det_J$mean() + D_chol_zk$logJ$mean() + log_det_S$mean()
+    diag_biasing_logJ <- torch_sum(torch_log(torch_sigmoid(10.0 * (diag - eps_diag))), dim = 2)
+    var_dens <- log_det_J$mean() + D_chol_zk$logJ$mean() + log_det_S$mean() + diag_biasing_logJ$mean()
 
     # Compute ELBO
     elbo <- likelihood + prior + var_dens
@@ -327,33 +328,46 @@ MVTPR_class <- nn_module(
 
       # Calculate the moments of the predictive distribution
       pred_moments <- self$calc_pred_moments(x_new, nsamp)
-      pred_mean <- pred_moments$pred_mean
-      pred_K <- pred_moments$K
-      pred_Omega <- pred_moments$Omega
-      pred_nu <- pred_moments$nu
 
-      L_S <- robust_chol(pred_K)
+      pred_mean <- as_array(pred_moments$pred_mean)
+      pred_K <- as_array(pred_moments$K)
+      pred_Omega <- as_array(pred_moments$Omega)
+      pred_nu <- as_array(pred_moments$nu)
 
-      Z <- torch_randn(c(nsamp, N_new, self$M), device=self$device)
+      # Permute all to conform to matrix t distribution sampling function
 
-      # Posterior degrees of freedom: nu_hat = nu + N
-      nu_hat <- pred_nu
+      pred_mean <- aperm(pred_mean, c(2, 3, 1))
+      pred_K <- aperm(pred_K, c(2, 3, 1))
+      pred_Omega <- aperm(pred_Omega, c(2, 3, 1))
 
-      # Sample g ~ Gamma(nu_hat/2, nu_hat/2) per draw, so E[g] = 1
-      # Then w = 1/g gives the inverse-chi-squared scaling
-      # sqrt(w) applied to the Gaussian draws produces matrix-t samples
-      g <- distr_gamma(
-        concentration = (nu_hat / 2)$view(c(-1)),
-        rate = torch_tensor(0.5, device = self$device)
-      )$sample()
+      pred_samples <- mniw::rMT(nsamp, pred_mean, pred_K, pred_Omega, pred_nu)
 
-      w <- (1 / g)$view(c(-1, 1, 1))
+      # Permute back to (nsamp, N_new, M)
+      pred_samples <- aperm(pred_samples, c(3, 1, 2))
 
-      L_Om <- robust_chol(pred_Omega)
-      pred_samples <- pred_mean +
-        torch_sqrt(w) * torch_bmm(torch_bmm(L_S, Z), L_Om$permute(c(1, 3, 2)))
-
+      # L_S <- robust_chol(pred_K)
+      #
+      # Z <- torch_randn(c(nsamp, N_new, self$M), device=self$device)
+      #
+      # # Posterior degrees of freedom: nu_hat = nu + N
+      # nu_hat <- pred_nu
+      #
+      # # Sample g ~ Gamma(nu_hat/2, nu_hat/2) per draw, so E[g] = 1
+      # # Then w = 1/g gives the inverse-chi-squared scaling
+      # # sqrt(w) applied to the Gaussian draws produces matrix-t samples
+      # g <- distr_gamma(
+      #   concentration = (nu_hat / 2)$view(c(-1)),
+      #   rate = torch_tensor(0.5, device = self$device)
+      # )$sample()
+      #
+      # w <- (1 / g)$view(c(-1, 1, 1))
+      #
+      # L_Om <- robust_chol(pred_Omega)
+      # pred_samples <- pred_mean +
+      #   torch_sqrt(w) * torch_bmm(torch_bmm(L_S, Z), L_Om$permute(c(1, 3, 2)))
+      #
       return(pred_samples)
+
     })
 
   },

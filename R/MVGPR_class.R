@@ -82,17 +82,17 @@ MVGPR_class <- nn_module(
 
   # Unnormalised log density of triple gamma prior
   ltg = function(x, a, c, lam) {
-    res <-  0.5 * torch_log(lam$unsqueeze(2)) -
+    res <- -0.5 * torch_log(lam$unsqueeze(2)) -
       0.5 * torch_log(x) +
-      log_hyperu(c + 0.5, 1.5 - a, a* x/(4.0 * c) * lam$unsqueeze(2))
+      log_hyperu(c + 0.5, 1.5 - a, a * x / (c * lam$unsqueeze(2)))
 
     return(res)
   },
 
   # Unnormalised log density of normal-gamma-gamma prior
   ngg = function(x, a, c, lam) {
-    res <- 0.5 * torch_log(lam$unsqueeze(2)) +
-      log_hyperu(c + 0.5, 1.5 - a,  a * x$pow(2)/(4.0 * c) * lam$unsqueeze(2))
+    res <- -0.5 * torch_log(lam$unsqueeze(2)) +
+      log_hyperu(c + 0.5, 1.5 - a, a * x$pow(2) / (c * lam$unsqueeze(2)))
 
     return(res)
   },
@@ -278,17 +278,18 @@ MVGPR_class <- nn_module(
 
     # Prior on theta
     prior <- self$ltg(theta_zk, self$prior_a, self$prior_c, tau_zk)$sum(dim = 2)$mean() +
-      self$ldf(tau_zk/2, 2*self$prior_c, 2*self$prior_a)$mean() +
+      self$ldf(tau_zk, 2*self$prior_c, 2*self$prior_a)$mean() +
       # Prior on D (LKJ)
       lkj_term$mean() +
       # Prior on S
       self$ltg(S_diag, self$prior_a_Om, self$prior_c_Om, tau_Om_zk)$sum(dim = 2)$mean() +
       # Prior on tau_Om
-      self$ldf(tau_Om_zk/2, 2*self$prior_c_Om, 2*self$prior_a_Om)$mean() +
+      self$ldf(tau_Om_zk, 2*self$prior_c_Om, 2*self$prior_a_Om)$mean() +
       # Prior on sigma^2
       self$lexp(sigma_zk, self$prior_rate)$mean()
 
-    var_dens <- log_det_J$mean() + D_chol_zk$logJ$mean() + log_det_S$mean()
+    diag_biasing_logJ <- torch_sum(torch_log(torch_sigmoid(10.0 * (diag - eps_diag))), dim = 2)
+    var_dens <- log_det_J$mean() + D_chol_zk$logJ$mean() + log_det_S$mean() + diag_biasing_logJ$mean()
 
     # Compute ELBO
     elbo <- likelihood + prior + var_dens

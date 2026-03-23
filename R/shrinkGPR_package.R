@@ -14,6 +14,8 @@
 #'
 #' @importFrom graphics boxplot
 #'
+#' @importFrom mniw rMT
+#'
 #'
 ## usethis namespace: end
 

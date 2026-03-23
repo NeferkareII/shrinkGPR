@@ -112,8 +112,11 @@ simMVGPR <-  function(N = 200,
 
   # Check that Omega, if provided, is an SPD matrix of size M x M
   if (!missing(Omega)) {
-    if (!is.numeric(Omega) || !is_correlation_matrix(Omega)) {
-      stop("The argument 'Omega', if provided, must be a symmetric positive definite correlation matrix of size M x M.")
+    if (!is.numeric(Omega) || !is.matrix(Omega) || nrow(Omega) != M || ncol(Omega) != M) {
+      stop("The argument 'Omega', if provided, must be a numeric symmetric positive definite matrix of size M x M.")
+    }
+    if (!isSymmetric(Omega) || any(eigen(Omega, only.values = TRUE)$values <= 0)) {
+      stop("The argument 'Omega', if provided, must be a symmetric positive definite matrix.")
     }
   }
 

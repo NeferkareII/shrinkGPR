@@ -2,7 +2,7 @@
 % Please edit documentation in R/shrinkMVGPR.R
 \name{shrinkMVGPR}
 \alias{shrinkMVGPR}
-\title{Gaussian Process Regression with Shrinkage and Normalizing Flows}
+\title{Multivaraite Gaussian Process Regression with Shrinkage and Normalizing Flows}
 \usage{
 shrinkMVGPR(
   formula,
@@ -82,7 +82,7 @@ A list object of class \code{shrinkGPR}, containing:
 \item{\code{model_internals}}{Internal objects required for predictions and further training, such as model matrices and formulas.}
 }
 \description{
-\code{shrinkGPR} implements Gaussian process regression (GPR) with a hierarchical shrinkage prior for hyperparameter estimation,
+\code{shrinkMVGPR} implements multivariate Gaussian process regression (MVGPR) with a hierarchical shrinkage prior for hyperparameter estimation,
 incorporating normalizing flows to approximate the posterior distribution. The function facilitates model specification, optimization,
 and training, including support for early stopping, user-defined kernels, and flow-based transformations.
 }

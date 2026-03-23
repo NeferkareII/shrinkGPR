@@ -23,7 +23,8 @@ Imports:
     rlang,
     utils,
     methods,
-    torch (>= 0.16.0)
+    torch (>= 0.16.0),
+    mniw
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Suggests: 
