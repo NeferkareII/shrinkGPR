@@ -212,7 +212,6 @@ GPR_class <- nn_module(
     tryCatch({
       likelihood <- self$ldnorm(K, NULL, sigma_zk, beta)$mean()
     }, error = function(ex) {
-      print(lam_zk)
       single_eye <- torch_eye(self$N, device = self$device)
       batch_sigma2 <- single_eye$`repeat`(c(sigma_zk$shape[1], 1, 1)) *
         sigma_zk$unsqueeze(2)$unsqueeze(2)

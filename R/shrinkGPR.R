@@ -422,7 +422,7 @@ shrinkGPR <- function(formula,
   # Initialize a variable to track whether the loop exited normally or due to interruption
   stop_reason <- "max_iterations"
   runtime <- system.time({
-   # tryCatch({
+    tryCatch({
       for (i in 1:n_epochs) {
 
         # Sample from base distribution
@@ -496,19 +496,19 @@ shrinkGPR <- function(formula,
           pb$tick(tokens = list(message = curr_message))
         }
       }
-  # }, interrupt = function(ex) {
-  #     stop_reason <<- "interrupted"
-  #     if (display_progress) {
-  #       pb$terminate()
-  #     }
-  #     message("\nTraining interrupted at iteration ", i, ". Returning model trained so far.")
-  #   }, error = function(ex) {
-  #     stop_reason <<- "error"
-  #     if (display_progress) {
-  #       pb$terminate()
-  #     }
-  #     message("\nError occurred at iteration ", i, ". Returning model trained so far.")
-  #   })
+    }, interrupt = function(ex) {
+      stop_reason <<- "interrupted"
+      if (display_progress) {
+        pb$terminate()
+      }
+      message("\nTraining interrupted at iteration ", i, ". Returning model trained so far.")
+    }, error = function(ex) {
+      stop_reason <<- "error"
+      if (display_progress) {
+        pb$terminate()
+      }
+      message("\nError occurred at iteration ", i, ". Returning model trained so far.")
+    })
   })
 
 

@@ -191,7 +191,7 @@ MVGPR_class <- nn_module(
 
   gen_batch = function(n_latent) {
     # Generate a batch of samples from the model
-    z <- torch_randn(n_latent, self$dim, device = self$device)
+    z <- self$rt_torch(n_latent, self$dim, nu = 2.1, device = self$device)
 
     # Specifically scale down the Omega components to push closer to identity
     # This stabilizes training, particularly in higher dimensions and early on
@@ -233,11 +233,6 @@ MVGPR_class <- nn_module(
 
     # Calculate covariance matrix Sigma
     K <- self$kernel_func(theta_zk, tau_zk, self$x)
-    if (torch_isnan(K$mean())$item()) {
-      cat(sprintf("K is NaN. Check components:\ntheta_zk: %g\ntau_zk: %g\n",
-                  theta_zk$mean()$item(), tau_zk$mean()$item()))
-      stop("K is NaN")
-    }
 
     # Calculate cholesky of correlation matrix D
     D_chol_zk <- self$make_corr_chol(D_uncons)

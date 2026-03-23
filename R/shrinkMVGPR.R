@@ -1,6 +1,6 @@
-#' Gaussian Process Regression with Shrinkage and Normalizing Flows
+#' Multivaraite Gaussian Process Regression with Shrinkage and Normalizing Flows
 #'
-#' \code{shrinkGPR} implements Gaussian process regression (GPR) with a hierarchical shrinkage prior for hyperparameter estimation,
+#' \code{shrinkMVGPR} implements multivariate Gaussian process regression (MVGPR) with a hierarchical shrinkage prior for hyperparameter estimation,
 #' incorporating normalizing flows to approximate the posterior distribution. The function facilitates model specification, optimization,
 #' and training, including support for early stopping, user-defined kernels, and flow-based transformations.
 #'
@@ -401,124 +401,98 @@ shrinkMVGPR <- function(formula,
   # Initialize a variable to track whether the loop exited normally or due to interruption
   stop_reason <- "max_iterations"
   runtime <- system.time({
-    # tryCatch({
+    tryCatch({
+      for (i in 1:n_epochs) {
+
+        # Sample from base distribution
+        z <- model$gen_batch(n_latent)
+
+        # Forward pass through model
+        zk_log_det_J <- model(z)
+        zk_pos <- zk_log_det_J$zk
+        log_det_J <- zk_log_det_J$log_det_J
 
 
-    for (i in 1:n_epochs) {
+        # Calculate loss, i.e. ELBO
+        # suppressWarnings because torchscript does not yet support torch.linalg.cholesky
+        loss <- suppressMessages(-model$elbo(zk_pos, log_det_J))
 
-      # Sample from base distribution
-      z <- model$gen_batch(n_latent)
+        # Zero gradients
+        optimizer$zero_grad()
 
-      # Forward pass through model
-      zk_log_det_J <- model(z)
-      zk_pos <- zk_log_det_J$zk
-      log_det_J <- zk_log_det_J$log_det_J
+        # Compute gradients, i.e. backprop
+        loss$backward()
 
+        # Clip gradients to avoid exploding gradients
+        nn_utils_clip_grad_norm_(model$parameters, max_norm = 0.5)
 
-      # Calculate loss, i.e. ELBO
-      # suppressWarnings because torchscript does not yet support torch.linalg.cholesky
-      loss <- suppressMessages(-model$elbo(zk_pos, log_det_J))
+        # Update parameters
+        optimizer$step()
 
-      loss_val <- loss$item()
+        # Store loss value
+        loss_stor[i] <- loss$item()
 
-      # # compute adaptive cap from last w finite losses
-      # lo <- max(1L, i - w + 1L)
-      # win <- loss_stor[lo:i]
-      # win <- win[is.finite(win)]
-      #
-      # if (length(win) >= 10L) {
-      #   med <- stats::median(win)
-      #   madv <- stats::mad(win, constant = 1)
-      #   cap <- max(cap_min, med + k_mad * madv)
-      # } else {
-      #   cap <- Inf
-      # }
-
-      # skip-step rule
-      # if (is.finite(loss_val) && loss_val <= cap) {
-
-      # Zero gradients
-      optimizer$zero_grad()
-
-      # Compute gradients, i.e. backprop
-      loss$backward()
-
-      # Clip gradients to avoid exploding gradients
-      nn_utils_clip_grad_norm_(model$parameters, max_norm = 0.5)
-
-      # Update parameters
-      optimizer$step()
-
-      # Store loss value
-      loss_stor[i] <- loss_val
-      # } else {
-      #   # If loss is not finite or exceeds the adaptive cap, skip the optimization step
-      #   optimizer$zero_grad()
-      #
-      #   loss_stor[i] <- loss_stor[i-1]
-      # }
-
-      # Check if model is best
-      if (i == 1) {
-        best_model <- model$clone(deep = TRUE)
-        best_loss <- loss$item()
-      } else if (loss$item() < best_loss & !is.na(loss$item()) & !is.infinite(loss$item())) {
-        best_model <- model$clone(deep = TRUE)
-        best_loss <- loss$item()
-      }
-
-      # Auto stop if no improvement in n_check iterations
-      if (auto_stop &
-          i %% n_check == 0 &
-          i > (n_check - 1)) {
-        X <- 1:n_check
-        Y <- loss_stor[(i - n_check + 1):i]
-        p_val <- lightweight_ols(Y, X)
-
-        # Slightly more lenient here, false positives are not as bad as false negatives
-        if (p_val > 0.2) {
-          stop_reason <- "auto_stop"
-          break
+        # Check if model is best
+        if (i == 1) {
+          best_model <- model$clone(deep = TRUE)
+          best_loss <- loss$item()
+        } else if (loss$item() < best_loss & !is.na(loss$item()) & !is.infinite(loss$item())) {
+          best_model <- model$clone(deep = TRUE)
+          best_loss <- loss$item()
         }
-      }
 
-      # Update progress bar
-      if (display_progress) {
+        # Auto stop if no improvement in n_check iterations
+        if (auto_stop &
+            i %% n_check == 0 &
+            i > (n_check - 1)) {
+          X <- 1:n_check
+          Y <- loss_stor[(i - n_check + 1):i]
+          p_val <- lightweight_ols(Y, X)
 
-        # Prepare message, this way width can be set
-        avg_loss_msg <- "Avg. loss last 50 iter.: "
-        avg_loss_width <- 7
-
-
-        # If less than 50 iterations, don't show avg loss
-        if (i >= 50) {
-
-          # Recalculate average loss every 10 iterations
-          if (i %% 10 == 0) {
-            avg_loss <- mean(loss_stor[(i - 49):i])
+          # Slightly more lenient here, false positives are not as bad as false negatives
+          if (p_val > 0.2) {
+            stop_reason <- "auto_stop"
+            break
           }
-
-          curr_message <- paste0(avg_loss_msg,
-                                 sprintf(paste0("%-", avg_loss_width, ".2f"), avg_loss))
-        } else {
-          curr_message <- format("", width = nchar(avg_loss_msg) + avg_loss_width)
         }
-        pb$tick(tokens = list(message = curr_message))
+
+        # Update progress bar
+        if (display_progress) {
+
+          # Prepare message, this way width can be set
+          avg_loss_msg <- "Avg. loss last 50 iter.: "
+          avg_loss_width <- 7
+
+
+          # If less than 50 iterations, don't show avg loss
+          if (i >= 50) {
+
+            # Recalculate average loss every 10 iterations
+            if (i %% 10 == 0) {
+              avg_loss <- mean(loss_stor[(i - 49):i])
+            }
+
+            curr_message <- paste0(avg_loss_msg,
+                                   sprintf(paste0("%-", avg_loss_width, ".2f"), avg_loss))
+          } else {
+            curr_message <- format("", width = nchar(avg_loss_msg) + avg_loss_width)
+          }
+          pb$tick(tokens = list(message = curr_message))
+        }
       }
-    }
-    #   }, interrupt = function(ex) {
-    #     stop_reason <<- "interrupted"
-    #     if (display_progress) {
-    #       pb$terminate()
-    #     }
-    #     message("\nTraining interrupted at iteration ", i, ". Returning model trained so far.")
-    #   }, error = function(ex) {
-    #     stop_reason <<- "error"
-    #     if (display_progress) {
-    #       pb$terminate()
-    #     }
-    #     message("\nError occurred at iteration ", i, ". Returning model trained so far.")
-    #   })
+    }, interrupt = function(ex) {
+      stop_reason <<- "interrupted"
+      if (display_progress) {
+        pb$terminate()
+      }
+      message("\nTraining interrupted at iteration ", i, ". Returning model trained so far.")
+    }, error = function(ex) {
+      stop_reason <<- "error"
+      if (display_progress) {
+        pb$terminate()
+      }
+      message("\nError occurred at iteration ", i, ". Returning model trained so far.")
+    })
   })
 
 
