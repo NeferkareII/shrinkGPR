@@ -385,46 +385,40 @@ MVTPR_class <- nn_module(
       pred_Omega <- pred_moments$Omega
       pred_nu <- pred_moments$nu
 
-      # Build diff for all y's and all draws:
-      diff <- y_new - pred_mean
+      # diff[s,i,m] = y_new[i,m] - pred_mean[s,0,m]
+      # (1, n_eval, M) - (nsamp, 1, M) -> (nsamp, n_eval, M)
+      diff <- y_new$unsqueeze(1) - pred_mean
 
-      L_K <- robust_chol(pred_K, upper = FALSE)
+      # Cholesky of Omega: (nsamp, M, M)
       L_Om <- robust_chol(pred_Omega, upper = FALSE)
 
-      # Expand diff for batching: (n_latent, n_eval, M)
-      Y <- diff$expand(c(nsamp, n_eval, M))
-      Yt <- Y$transpose(-2, -1)
+      # Scalar row variance per sample
+      k_s <- pred_K$squeeze(2)$squeeze(2)
 
-      # B = Y^T K^{-1} Y via cholesky_solve
-      alpha <- torch_cholesky_solve(Y, L_K, upper = FALSE)
-      B <- torch_bmm(Yt, alpha)
+      # Mahalanobis w.r.t. Omega: maha_Om[s,i] = ||L_Om_s^{-1} diff[s,i,:]||^2
+      # diff permuted to (nsamp, M, n_eval) for triangular solve
+      X <- linalg_solve_triangular(L_Om, diff$permute(c(1, 3, 2)), upper = FALSE)
+      maha_Om <- torch_sum(X$pow(2), dim = 2)
+      maha_scaled <- maha_Om / k_s$unsqueeze(2)
 
-      # C = L_Om^{-1} B L_Om^{-T}
-      X <- linalg_solve_triangular(L_Om, B, upper = FALSE, left = TRUE)
-      C <- linalg_solve_triangular(L_Om$transpose(-2, -1), X, upper = TRUE, left = FALSE)
-
-      # logdet(I + C)
-      I_M <- torch_eye(M, device = self$device)$unsqueeze(1)$expand(c(nsamp, M, M))
-      L_Iplus <- robust_chol(I_M + C, upper = FALSE)
-      diag_LI <- torch_diagonal(L_Iplus, dim1 = -2, dim2 = -1)
-      ld_Iplus <- 2 * torch_sum(torch_log(diag_LI), dim = 2)
-
-      # logdet(K) and logdet(Omega) from Cholesky factors
-      diag_K  <- torch_diagonal(L_K,  dim1 = -2, dim2 = -1)
+      # Log determinant of Omega
       diag_Om <- torch_diagonal(L_Om, dim1 = -2, dim2 = -1)
-      ld_K  <- 2 * torch_sum(torch_log(diag_K),  dim = 2)
       ld_Om <- 2 * torch_sum(torch_log(diag_Om), dim = 2)
 
-      # NLL
-      nll <- 0.5 * (pred_nu + n_eval + M - 1) * ld_Iplus +
-        0.5 * M * ld_K +
-        0.5 * n_eval * ld_Om +
-        0.5 * n_eval * M * log(pi) +
-        ( torch_mvlgamma(0.5 * (pred_nu + n_eval - 1), n_eval) -
-            torch_mvlgamma(0.5 * (pred_nu + n_eval + M - 1), n_eval) )
+      # Normalizing constant: N-dim form with N=1
+      # log Gamma_1((nu+M)/2) - log Gamma_1(nu/2) = lgamma((nu+M)/2) - lgamma(nu/2)
+      log_norm <- (torch_mvlgamma(0.5 * (pred_nu + M), 1L) -
+                     torch_mvlgamma(0.5 * pred_nu, 1L) -
+                     0.5 * M * log(pi) -
+                     0.5 * M * torch_log(k_s) -
+                     0.5 * ld_Om)
 
-      log_comp <- -nll
+      # Log density per (sample, eval point)
+      # |I_M + Omega^{-1}(y-mu)^T k^{-1}(y-mu)| = 1 + maha_scaled  (matrix det lemma, rank-1)
+      log_comp <- log_norm$unsqueeze(2) -
+        0.5 * (pred_nu + M)$unsqueeze(2) * torch_log1p(maha_scaled)
 
+      # Average over posterior samples via log-mean-exp, one value per eval point
       m <- torch_max(log_comp, dim = 1)[[1]]
       res <- m + torch_log(torch_mean(torch_exp(log_comp - m$unsqueeze(1)), dim = 1))
 

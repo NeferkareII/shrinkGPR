@@ -88,6 +88,13 @@ eval_pred_dens <- function(x, mod, data_test, nsamp = 100, log = FALSE){
   if (any(class(mod) %in% c("shrinkGPR", "shrinkTPR"))) {
     res_tens <- mod$model$eval_pred_dens(x_tens, x_test, nsamp, x_test_mean, log)
   } else {
+
+    # Check x_tens dimensions against response dimensions for shrinkMVGPR
+    if (dim(x_tens)[2] != mod$model_internals$M) {
+      stop(paste0("The number of columns in 'x' (", dim(x_tens)[2], ") must match the number of
+                  response dimensions (", mod$model_internals$M, ") for a 'shrinkMVGPR' or 'shrinkMVTPR' model."))
+    }
+
     res_tens <- mod$model$eval_pred_dens(x_tens, x_test, nsamp, log)
   }
 
@@ -236,9 +243,16 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
                 vars = as.array(res_tens[[2]])))
   } else if ("shrinkMVGPR" %in% class(object)) {
     res_tens <- object$model$calc_pred_moments(x_tens, nsamp)
-    return(list(means = as.array(res_tens[[1]]),
-                K = as.array(res_tens[[2]]),
-                Omega = as.array(res_tens[[3]])))
+
+    res_list <- list(means = as.array(res_tens[[1]]),
+                     K = as.array(res_tens[[2]]),
+                     Omega = as.array(res_tens[[3]]))
+
+    if ("shrinkMVTPR" %in% class(object)) {
+      res_list$nu <- as.array(res_tens[[4]])
+    }
+
+    return(res_list)
   }
 }
 
