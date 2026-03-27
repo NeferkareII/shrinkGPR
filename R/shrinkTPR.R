@@ -51,14 +51,14 @@
 #' Given \eqn{N} observations with \eqn{d}-dimensional covariates \eqn{x_i}, the joint density is thus
 #' \deqn{(f(x_1), \ldots, f(x_N)) \sim t_N\!\left(\nu,\, \mu(x_1, \ldots, x_N),\, K(\theta, \tau)\right),}.
 #' which means that \eqn{f} follows \eqn{\mathcal{TP}(\nu, \mu, k(\cdot, \cdot\,;\, \theta, \tau))} Student-t process with \eqn{\nu} degrees of freedom, mean function \eqn{\mu},
-#' and covariance kernel \eqn{k}. As opposed to a Gaussian process regression model, the noise is added directly to the kernel, so the 
-#' likelihood for the observations is \eqn{Y \sim t_N\!\left(\nu,\, \mu(x_1, \ldots, x_N),\, K(\theta, \tau) + \sigma^2 I\right)}. 
+#' and covariance kernel \eqn{k}. As opposed to a Gaussian process regression model, the noise is added directly to the kernel, so the
+#' likelihood for the observations is \eqn{Y \sim t_N\!\left(\nu,\, \mu(x_1, \ldots, x_N),\, K(\theta, \tau) + \sigma^2 I\right)}.
 #' The default squared exponential kernel is
 #' \deqn{k(x, x';\, \theta, \tau) = \frac{1}{\tau} \exp\!\left(-\frac{1}{2} \sum_{j=1}^d \theta_j (x_j - x'_j)^2\right),}
-#' where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{\tau > 0} is the output scale. 
-#' Users can specify custom kernels by following the guidelines below, or use one of the other provided kernel functions in 
+#' where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{\tau > 0} is the output scale.
+#' Users can specify custom kernels by following the guidelines below, or use one of the other provided kernel functions in
 #' \code{\link{kernel_functions}}.
-#' 
+#'
 #' If \code{formula_mean} is provided, the process mean becomes \eqn{x_{\mu,i}^\top \beta}.
 #'
 #' \strong{Priors}

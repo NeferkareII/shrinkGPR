@@ -1,6 +1,6 @@
 #' Evaluate Predictive Densities
 #'
-#' \code{eval_pred_dens} evaluates the predictive density for a set of points based on a fitted \code{shrinkGPR}, \code{shrinkTPR}, 
+#' \code{eval_pred_dens} evaluates the predictive density for a set of points based on a fitted \code{shrinkGPR}, \code{shrinkTPR},
 #' \code{shrinkMVGPR}, or \code{shrinkMVTPR} model.
 #'
 #' @param x For univariate models (\code{shrinkGPR}, \code{shrinkTPR}): a numeric vector of response values at which to evaluate the density.
@@ -13,7 +13,7 @@
 #' @param log Logical; if \code{TRUE}, returns the log predictive density. Default is \code{FALSE}.
 #' @return A numeric vector containing the predictive densities (or log predictive densities) for the points in \code{x}.
 #' @details
-#' This function computes predictive densities by marginalizing over posterior samples drawn from the fitted model. 
+#' This function computes predictive densities by marginalizing over posterior samples drawn from the fitted model.
 #' If a mean equation was included in the model, the corresponding covariates are used to calculate the predictive mean.
 #' @examples
 #' \donttest{
@@ -107,7 +107,7 @@ eval_pred_dens <- function(x, mod, data_test, nsamp = 100, log = FALSE){
 
 #' Log Predictive Density Score
 #'
-#' \code{LPDS} calculates the log predictive density score for a fitted \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR} 
+#' \code{LPDS} calculates the log predictive density score for a fitted \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR}
 #' model using a test dataset.
 #'
 #' @param mod A \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR} object representing the fitted model.
@@ -173,7 +173,7 @@ LPDS <- function(mod, data_test, nsamp = 100) {
 #' \code{calc_pred_moments} calculates the predictive means and variances for a fitted \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR}
 #' model at new data points.
 #'
-#' @param object A \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR} object representing the fitted univariate or 
+#' @param object A \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR} object representing the fitted univariate or
 #' multivariate Gaussian or t process regression model.
 #' @param newdata \emph{Optional} data frame containing the covariates for the new data points. If missing, the training data is used.
 #' @param nsamp Positive integer specifying the number of posterior samples to use for the calculation. Default is 100.
@@ -194,7 +194,7 @@ LPDS <- function(mod, data_test, nsamp = 100) {
 #'   \item \code{nu}: (\code{shrinkMVTPR} only) A vector of posterior degrees of freedom of length \code{nsamp}.
 #' }
 #' @details
-#' This function computes predictive moments by marginalizing over posterior samples from the fitted model. 
+#' This function computes predictive moments by marginalizing over posterior samples from the fitted model.
 #' If a mean equation was included in the model, the corresponding covariates are used to calculate the predictive mean.
 #' @examples
 #' \donttest{
@@ -260,7 +260,7 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
     res_tens <- object$model$calc_pred_moments(x_tens, nsamp, x_test_mean)
 
     res_list <- list(means = as.matrix(res_tens[[1]]),
-                vars = as.matrix(res_tens[[2]]))
+                vars = as_array(res_tens[[2]]))
 
     if ("shrinkTPR" %in% class(object)) {
       res_list$nu <- as.numeric(res_tens[[3]])
@@ -271,9 +271,9 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
   } else if ("shrinkMVGPR" %in% class(object)) {
     res_tens <- object$model$calc_pred_moments(x_tens, nsamp)
 
-    res_list <- list(means = as.array(res_tens[[1]]),
-                     K = as.array(res_tens[[2]]),
-                     Omega = as.array(res_tens[[3]]))
+    res_list <- list(means = as_array(res_tens[[1]]),
+                     K = as_array(res_tens[[2]]),
+                     Omega = as_array(res_tens[[3]]))
 
     if ("shrinkMVTPR" %in% class(object)) {
       res_list$nu <- as.array(res_tens[[4]])
@@ -426,10 +426,10 @@ predict.shrinkTPR <- function(object, newdata, nsamp = 100, ...) {
 #'   y1 <- sin(2 * pi * x[, 1])
 #'   y2 <- cos(2 * pi * x[, 2])
 #'   y <- cbind(y1, y2) + matrix(rnorm(n * 2, sd = 0.1), n, 2)
-#'   data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
+#'   data <- data.frame(y1 = y1, y2 = y2, x1 = x[, 1], x2 = x[, 2])
 #'
 #'   # Fit MVGPR model
-#'   res <- shrinkMVGPR(cbind(y.1, y.2) ~ x1 + x2, data = data)
+#'   res <- shrinkMVGPR(cbind(y1, y2) ~ x1 + x2, data = data)
 #'   # Example usage for in-sample prediction
 #'   preds <- predict(res)
 #'
@@ -453,9 +453,9 @@ predict.shrinkMVGPR <- function(object, newdata, nsamp = 100, ...) {
 #' \itemize{
 #'   \item \code{thetas}: A matrix of posterior samples for the inverse lengthscale parameters.
 #'   \item \code{sigma2}: A matrix of posterior samples for the noise variance.
-#'   \item \code{lambda}: A matrix of posterior samples for the global shrinkage parameter.
+#'   \item \code{tau}: A matrix of posterior samples for the global shrinkage parameter.
 #'   \item \code{betas} (optional): A matrix of posterior samples for the mean equation parameters (if included in the model).
-#'   \item \code{lambda_mean} (optional): A matrix of posterior samples for the mean equation's global shrinkage parameter (if included in the model).
+#'   \item \code{tau_mean} (optional): A matrix of posterior samples for the mean equation's global shrinkage parameter (if included in the model).
 #' }
 #' Additionally, for a \code{shrinkTPR} model, the list also includes:
 #' \itemize{
@@ -474,7 +474,7 @@ predict.shrinkMVGPR <- function(object, newdata, nsamp = 100, ...) {
 #'   \item \code{nu}: A matrix of posterior samples for the degrees of freedom parameter.
 #' }
 #' @details
-#' This function draws posterior samples from the latent space and transforms them into the parameter space of the model. 
+#' This function draws posterior samples from the latent space and transforms them into the parameter space of the model.
 #' These samples can be used for posterior inference or further analysis, such as examining which inverse lengthscale parameters pulled to zero.
 #' @examples
 #' \donttest{
@@ -522,15 +522,15 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
     # Convention:
     # First d_cov components are the theta parameters
     # Next component is the sigma parameter
-    # Next component is the lambda parameter
+    # Next component is the tau parameter
     # Next d_mean components are the mean parameters
-    # Last component is the lambda parameter for the mean
+    # Last component is the tau parameter for the mean
 
     d_cov <- mod$model_internals$d_cov
 
     res <- list(thetas = as.matrix(zk[, 1:d_cov]),
                 sigma2 = as.matrix(zk[, d_cov + 1]),
-                lambda = as.matrix(zk[, d_cov + 2]))
+                tau = as.matrix(zk[, d_cov + 2]))
 
     colnames(res$thetas) <- paste0("theta_", attr(mod$model_internals$terms, "term.labels"))
 
@@ -538,7 +538,7 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
     if (mod$model_internals$x_mean) {
       d_mean <- mod$model_internals$d_mean
       res$betas <- as.matrix(zk[, (d_cov + 3):(d_cov + 2 + d_mean)])
-      res$lambda_mean <- as.matrix(zk[, d_cov + 2 + d_mean + 1])
+      res$tau_mean <- as.matrix(zk[, d_cov + 2 + d_mean + 1])
 
       colnames(res$betas) <- paste0("beta_", mod$model_internals$x_mean_names)
     }

@@ -189,31 +189,9 @@ MVGPR_class <- nn_module(
     return(list(zk = zk, log_det_J = log_det_J))
   },
 
-  # Function to generate data from t distribution
-  rt_torch = function(..., nu, device = "cpu", dtype = torch_float()) {
-    sample_shape <- c(...)
-
-    nu_t <- torch_scalar_tensor(nu, device = device, dtype = dtype)  # scalar
-    z <- torch_randn(!!!sample_shape, device = device, dtype = dtype)
-
-    g <- distr_gamma(
-      concentration = nu_t / 2,
-      rate = torch_scalar_tensor(0.5, device = device, dtype = dtype) # scalar
-    )
-    u <- g$sample(sample_shape = sample_shape)
-
-    # drop trailing singleton if present
-    if (u$ndim == z$ndim + 1 && u$size(u$ndim) == 1) {
-      u <- u$squeeze(-1)
-    }
-
-    z / torch_sqrt(u / nu_t)
-  },
-
   gen_batch = function(n_latent) {
     # Generate a batch of samples from the model
-    z <- self$rt_torch(n_latent, self$dim, nu = 5, device = self$device)
-    #z <- torch_randn(c(n_latent, self$dim), device = self$device)
+    z <- torch_randn(c(n_latent, self$dim), device = self$device)
 
     # Specifically scale down the Omega components to push closer to identity
     # This stabilizes training, particularly in higher dimensions and early on

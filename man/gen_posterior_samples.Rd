@@ -16,9 +16,9 @@ For univariate models (\code{shrinkGPR}, \code{shrinkTPR}), a list containing po
 \itemize{
 \item \code{thetas}: A matrix of posterior samples for the inverse lengthscale parameters.
 \item \code{sigma2}: A matrix of posterior samples for the noise variance.
-\item \code{lambda}: A matrix of posterior samples for the global shrinkage parameter.
+\item \code{tau}: A matrix of posterior samples for the global shrinkage parameter.
 \item \code{betas} (optional): A matrix of posterior samples for the mean equation parameters (if included in the model).
-\item \code{lambda_mean} (optional): A matrix of posterior samples for the mean equation's global shrinkage parameter (if included in the model).
+\item \code{tau_mean} (optional): A matrix of posterior samples for the mean equation's global shrinkage parameter (if included in the model).
 }
 Additionally, for a \code{shrinkTPR} model, the list also includes:
 \itemize{

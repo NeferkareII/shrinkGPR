@@ -36,10 +36,10 @@ if (torch::torch_is_installed()) {
   y1 <- sin(2 * pi * x[, 1])
   y2 <- cos(2 * pi * x[, 2])
   y <- cbind(y1, y2) + matrix(rnorm(n * 2, sd = 0.1), n, 2)
-  data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
+  data <- data.frame(y1 = y1, y2 = y2, x1 = x[, 1], x2 = x[, 2])
 
   # Fit MVGPR model
-  res <- shrinkMVGPR(cbind(y.1, y.2) ~ x1 + x2, data = data)
+  res <- shrinkMVGPR(cbind(y1, y2) ~ x1 + x2, data = data)
   # Example usage for in-sample prediction
   preds <- predict(res)
 

@@ -1,6 +1,10 @@
 # Changes in Version 2.0.0:
-  - Added support for multivariate GPR under shrinkage
-
+  - Potentially breaking change: Changed name of global shrinkage parameter from lambda to be more consistent with paper
+  - Added support for multivariate GPR and TPR under shrinkage
+  - Added method to save and load model objects
+  - Overhauled documentation to be more informative, including model specification
+  - Fixed various bugs
+  
 ## Changes in Version 1.1.3
   - Fixed issues on CRAN with examples being run when torch is not installed 
 
@@ -8,7 +12,6 @@
   - Moved to torch for R version >= 0.16.0
   - Made training loop more numerically robust by falling back on robust Cholesky decomposition
   - Fixed error in documentation for sylvester flows
-  - Changed base distribution to t distribution for better tail behavior 
   - Fixed issues on CRAN with examples being run when torch is not installed
 
 ## Changes in Version 1.1.1:
