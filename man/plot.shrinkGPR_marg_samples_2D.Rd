@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_functions.R
 \name{plot.shrinkGPR_marg_samples_2D}
 \alias{plot.shrinkGPR_marg_samples_2D}
-\title{Plot method for 2D marginal predictions from \code{shrinkGPR}}
+\title{Plot method for 2D marginal predictions}
 \usage{
 \method{plot}{shrinkGPR_marg_samples_2D}(x, ...)
 }

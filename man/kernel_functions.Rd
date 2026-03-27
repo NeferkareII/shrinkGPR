@@ -6,7 +6,7 @@
 \alias{kernel_matern_12}
 \alias{kernel_matern_32}
 \alias{kernel_matern_52}
-\title{Kernel Functions for Gaussian Processes}
+\title{Kernel Functions for Gaussian and t Processes}
 \usage{
 kernel_se(thetas, tau, x, x_star = NULL)
 
@@ -34,9 +34,9 @@ A \code{torch_tensor} containing the batched covariance matrices (one for each l
 }
 }
 \description{
-A set of kernel functions for Gaussian processes, including the squared exponential (SE) kernel and Matérn kernels
-with smoothness parameters 1/2, 3/2, and 5/2. These kernels compute the covariance structure for Gaussian process regression
-models and are designed for compatibility with the \code{shrinkGPR} function.
+A set of kernel functions for Gaussian and t processes, including the squared exponential (SE) kernel and Matérn kernels
+with smoothness parameters 1/2, 3/2, and 5/2. These kernels compute the covariance structure for Gaussian and t process regression
+models and are designed for compatibility with the \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR} and \code{shrinkMVTPR} functions.
 }
 \details{
 These kernel functions are used to define the covariance structure in Gaussian process regression models. Each kernel implements a specific covariance function:

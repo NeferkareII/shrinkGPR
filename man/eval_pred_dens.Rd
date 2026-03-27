@@ -7,9 +7,11 @@
 eval_pred_dens(x, mod, data_test, nsamp = 100, log = FALSE)
 }
 \arguments{
-\item{x}{Numeric vector of points for which the predictive density is to be evaluated.}
+\item{x}{For univariate models (\code{shrinkGPR}, \code{shrinkTPR}): a numeric vector of response values at which to evaluate the density.
+For multivariate models (\code{shrinkMVGPR}, \code{shrinkMVTPR}): a numeric matrix with \code{M} columns, where each row is a
+candidate response vector.}
 
-\item{mod}{A \code{shrinkGPR} object representing the fitted Gaussian process regression model.}
+\item{mod}{A \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR} object representing the fitted model.}
 
 \item{data_test}{Data frame with one row containing the covariates for the test set.
 Variables in \code{data_test} must match those used in model fitting.}
@@ -22,10 +24,12 @@ Variables in \code{data_test} must match those used in model fitting.}
 A numeric vector containing the predictive densities (or log predictive densities) for the points in \code{x}.
 }
 \description{
-\code{eval_pred_dens} evaluates the predictive density for a set of points based on a fitted \code{shrinkGPR} model.
+\code{eval_pred_dens} evaluates the predictive density for a set of points based on a fitted \code{shrinkGPR}, \code{shrinkTPR},
+\code{shrinkMVGPR}, or \code{shrinkMVTPR} model.
 }
 \details{
-This function computes predictive densities by marginalizing over posterior samples drawn from the fitted model. If the mean equation is included in the model, the corresponding covariates are incorporated.
+This function computes predictive densities by marginalizing over posterior samples drawn from the fitted model.
+If a mean equation was included in the model, the corresponding covariates are used to calculate the predictive mean.
 }
 \examples{
 \donttest{

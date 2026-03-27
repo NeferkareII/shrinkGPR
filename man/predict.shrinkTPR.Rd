@@ -7,7 +7,7 @@
 \method{predict}{shrinkTPR}(object, newdata, nsamp = 100, ...)
 }
 \arguments{
-\item{object}{A \code{shrinkTPR} object representing the fitted Gaussian process regression model.}
+\item{object}{A \code{shrinkTPR} object representing the fitted Student-t process regression model.}
 
 \item{newdata}{\emph{Optional} data frame containing the covariates for the prediction points. If missing, the training data is used.}
 

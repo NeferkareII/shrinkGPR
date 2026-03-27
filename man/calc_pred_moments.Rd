@@ -7,24 +7,38 @@
 calc_pred_moments(object, newdata, nsamp = 100)
 }
 \arguments{
-\item{object}{A \code{shrinkGPR} object representing the fitted Gaussian process regression model.}
+\item{object}{A \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR} object representing the fitted univariate or
+multivariate Gaussian or t process regression model.}
 
 \item{newdata}{\emph{Optional} data frame containing the covariates for the new data points. If missing, the training data is used.}
 
 \item{nsamp}{Positive integer specifying the number of posterior samples to use for the calculation. Default is 100.}
 }
 \value{
-A list with two elements:
+For univariate models (\code{shrinkGPR}, \code{shrinkTPR}), a list with:
 \itemize{
-\item \code{means}: A matrix of predictive means for each new data point, with the rows being the samples and the columns the data points.
-\item \code{vars}: An array of covariance matrices, with the first dimension corresponding to the samples and second and third dimensions to the data points.
+\item \code{means}: An array of predictive means, with the first dimension corresponding to samples, the second to data points.
+\item \code{vars}: An array of predictive variances, with the first dimension corresponding to samples and second and third to data points.
+}
+Additionally, for a \code{shrinkTPR} model, the list also includes:
+\itemize{
+\item \code{nu}: A vector of posterior degrees of freedom of length \code{nsamp}.
+}
+For multivariate models (\code{shrinkMVGPR}, \code{shrinkMVTPR}), a list with:
+\itemize{
+\item \code{means}: An array of predictive means of shape \code{nsamp x N_new x M}.
+\item \code{K}: An array of posterior row covariance matrices of shape \code{nsamp x N_new x N_new}.
+\item \code{Omega}: An array of posterior column covariance matrices of shape \code{nsamp x M x M}.
+\item \code{nu}: (\code{shrinkMVTPR} only) A vector of posterior degrees of freedom of length \code{nsamp}.
 }
 }
 \description{
-\code{calc_pred_moments} calculates the predictive means and variances for a fitted \code{shrinkGPR} model at new data points.
+\code{calc_pred_moments} calculates the predictive means and variances for a fitted \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR}
+model at new data points.
 }
 \details{
-This function computes predictive moments by marginalizing over posterior samples from the fitted model. If the mean equation is included in the model, the corresponding covariates are used.
+This function computes predictive moments by marginalizing over posterior samples from the fitted model.
+If a mean equation was included in the model, the corresponding covariates are used to calculate the predictive mean.
 }
 \examples{
 \donttest{

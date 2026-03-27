@@ -1,8 +1,8 @@
-#' @title Kernel Functions for Gaussian Processes
+#' @title Kernel Functions for Gaussian and t Processes
 #' @description
-#' A set of kernel functions for Gaussian processes, including the squared exponential (SE) kernel and Matérn kernels
-#' with smoothness parameters 1/2, 3/2, and 5/2. These kernels compute the covariance structure for Gaussian process regression
-#' models and are designed for compatibility with the \code{shrinkGPR} function.
+#' A set of kernel functions for Gaussian and t processes, including the squared exponential (SE) kernel and Matérn kernels
+#' with smoothness parameters 1/2, 3/2, and 5/2. These kernels compute the covariance structure for Gaussian and t process regression
+#' models and are designed for compatibility with the \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR} and \code{shrinkMVTPR} functions.
 #' @name kernel_functions
 #' @param thetas A \code{torch_tensor} of dimensions \code{n_latent x d}, representing the latent length-scale parameters.
 #' @param tau A \code{torch_tensor} of length \code{n_latent}, representing the latent scaling factors.

@@ -31,7 +31,7 @@ simMVGPR(
 
 \item{kernel_func}{Function specifying the covariance kernel. Default is \code{kernel_se}.}
 
-\item{perc_spars}{Numeric value in [0, 1] indicating the proportion of elements in \code{theta}. Default is 0.5.}
+\item{perc_spars}{Numeric value in [0, 1] indicating the proportion of inactive (zero) inverse length-scale parameters in \code{theta}. Default is 0.5.}
 
 \item{rho}{Numeric value in [0, 1] indicating the correlation between the covariates. Default is 0.}
 
@@ -83,7 +83,7 @@ if (torch::torch_is_installed()) {
   sim_data <- simMVGPR()
 
   # Simulate data with custom settings
-  sim_data <- simGPR(N = 100, d = 5, perc_spars = 0.3, sigma2 = 0.5)
+  sim_data <- simMVGPR(N = 100, d = 5, perc_spars = 0.3, sigma2 = 0.5)
 
   # Access the simulated data
   head(sim_data$data)

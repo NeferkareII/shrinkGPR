@@ -7,7 +7,7 @@
 \method{predict}{shrinkMVGPR}(object, newdata, nsamp = 100, ...)
 }
 \arguments{
-\item{object}{A \code{shrinkMVGPR} object representing the fitted multivariate Gaussian process regression model.}
+\item{object}{A \code{shrinkMVGPR} or \code{shrinkMVTPR} object representing the fitted multivariate process regression model.}
 
 \item{newdata}{\emph{Optional} data frame containing the covariates for the prediction points. If missing, the training data is used.}
 
@@ -16,7 +16,8 @@
 \item{...}{Currently ignored.}
 }
 \value{
-A matrix containing posterior predictive samples for each covariate combination in \code{newdata}.
+A 3-dimensional array of dimensions \code{nsamp x N_new x M} containing posterior predictive samples
+for each covariate combination in \code{newdata}.
 }
 \description{
 \code{predict.shrinkMVGPR} generates posterior predictive samples from a fitted \code{shrinkMVGPR} model at specified covariates.

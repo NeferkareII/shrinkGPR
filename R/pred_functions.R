@@ -1,16 +1,20 @@
 #' Evaluate Predictive Densities
 #'
-#' \code{eval_pred_dens} evaluates the predictive density for a set of points based on a fitted \code{shrinkGPR} model.
+#' \code{eval_pred_dens} evaluates the predictive density for a set of points based on a fitted \code{shrinkGPR}, \code{shrinkTPR}, 
+#' \code{shrinkMVGPR}, or \code{shrinkMVTPR} model.
 #'
-#' @param x Numeric vector of points for which the predictive density is to be evaluated.
-#' @param mod A \code{shrinkGPR} object representing the fitted Gaussian process regression model.
+#' @param x For univariate models (\code{shrinkGPR}, \code{shrinkTPR}): a numeric vector of response values at which to evaluate the density.
+#' For multivariate models (\code{shrinkMVGPR}, \code{shrinkMVTPR}): a numeric matrix with \code{M} columns, where each row is a
+#' candidate response vector.
+#' @param mod A \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR} object representing the fitted model.
 #' @param data_test Data frame with one row containing the covariates for the test set.
 #' Variables in \code{data_test} must match those used in model fitting.
 #' @param nsamp Positive integer specifying the number of posterior samples to use for the evaluation. Default is 100.
 #' @param log Logical; if \code{TRUE}, returns the log predictive density. Default is \code{FALSE}.
 #' @return A numeric vector containing the predictive densities (or log predictive densities) for the points in \code{x}.
 #' @details
-#' This function computes predictive densities by marginalizing over posterior samples drawn from the fitted model. If the mean equation is included in the model, the corresponding covariates are incorporated.
+#' This function computes predictive densities by marginalizing over posterior samples drawn from the fitted model. 
+#' If a mean equation was included in the model, the corresponding covariates are used to calculate the predictive mean.
 #' @examples
 #' \donttest{
 #' if (torch::torch_is_installed()) {
@@ -47,8 +51,8 @@ eval_pred_dens <- function(x, mod, data_test, nsamp = 100, log = FALSE){
   }
 
   # Check that mod is a shrinkGPR object
-  if (!any(class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR"))) {
-    stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
+  if (!any(class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR", "shrinkMVTPR"))) {
+    stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR', 'shrinkMVGPR' or 'shrinkMVTPR'.")
   }
 
   # Check that data_test is a data frame with one row
@@ -103,16 +107,17 @@ eval_pred_dens <- function(x, mod, data_test, nsamp = 100, log = FALSE){
 
 #' Log Predictive Density Score
 #'
-#' \code{LPDS} calculates the log predictive density score for a fitted \code{shrinkGPR} model using a test dataset.
+#' \code{LPDS} calculates the log predictive density score for a fitted \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR} 
+#' model using a test dataset.
 #'
-#' @param mod A \code{shrinkGPR} object representing the fitted Gaussian process regression model.
+#' @param mod A \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR} object representing the fitted model.
 #' @param data_test Data frame with one row containing the covariates for the test set.
 #' Variables in \code{data_test} must match those used in model fitting.
 #' @param nsamp Positive integer specifying the number of posterior samples to use for the evaluation. Default is 100.
 #' @return A numeric value representing the log predictive density score for the test dataset.
 #' @details
 #' The log predictive density score is a measure of model fit that evaluates how well the model predicts unseen data.
-#' It is computed as the log of the marginal predictive density of the observed responses.
+#' It is computed as the log of the marginal predictive density at the true observed responses.
 #' @examples
 #' \donttest{
 #' if (torch::torch_is_installed()) {
@@ -141,8 +146,8 @@ LPDS <- function(mod, data_test, nsamp = 100) {
   # Input checking for LPDS -------------------------------------------------
 
   # Check that mod is a shrinkGPR object
-  if (!any(class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR"))) {
-    stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
+  if (!any(class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR", "shrinkMVTPR"))) {
+    stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR', 'shrinkMVGPR' or 'shrinkMVTPR'.")
   }
 
   # Check that data_test is a data frame with one row
@@ -165,18 +170,32 @@ LPDS <- function(mod, data_test, nsamp = 100) {
 
 #' Calculate Predictive Moments
 #'
-#' \code{calc_pred_moments} calculates the predictive means and variances for a fitted \code{shrinkGPR} model at new data points.
+#' \code{calc_pred_moments} calculates the predictive means and variances for a fitted \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR}
+#' model at new data points.
 #'
-#' @param object A \code{shrinkGPR} object representing the fitted Gaussian process regression model.
+#' @param object A \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR} object representing the fitted univariate or 
+#' multivariate Gaussian or t process regression model.
 #' @param newdata \emph{Optional} data frame containing the covariates for the new data points. If missing, the training data is used.
 #' @param nsamp Positive integer specifying the number of posterior samples to use for the calculation. Default is 100.
-#' @return A list with two elements:
+#' @return For univariate models (\code{shrinkGPR}, \code{shrinkTPR}), a list with:
 #' \itemize{
-#'   \item \code{means}: A matrix of predictive means for each new data point, with the rows being the samples and the columns the data points.
-#'   \item \code{vars}: An array of covariance matrices, with the first dimension corresponding to the samples and second and third dimensions to the data points.
+#'   \item \code{means}: An array of predictive means, with the first dimension corresponding to samples, the second to data points.
+#'   \item \code{vars}: An array of predictive variances, with the first dimension corresponding to samples and second and third to data points.
+#' }
+#' Additionally, for a \code{shrinkTPR} model, the list also includes:
+#' \itemize{
+#'   \item \code{nu}: A vector of posterior degrees of freedom of length \code{nsamp}.
+#' }
+#' For multivariate models (\code{shrinkMVGPR}, \code{shrinkMVTPR}), a list with:
+#' \itemize{
+#'   \item \code{means}: An array of predictive means of shape \code{nsamp x N_new x M}.
+#'   \item \code{K}: An array of posterior row covariance matrices of shape \code{nsamp x N_new x N_new}.
+#'   \item \code{Omega}: An array of posterior column covariance matrices of shape \code{nsamp x M x M}.
+#'   \item \code{nu}: (\code{shrinkMVTPR} only) A vector of posterior degrees of freedom of length \code{nsamp}.
 #' }
 #' @details
-#' This function computes predictive moments by marginalizing over posterior samples from the fitted model. If the mean equation is included in the model, the corresponding covariates are used.
+#' This function computes predictive moments by marginalizing over posterior samples from the fitted model. 
+#' If a mean equation was included in the model, the corresponding covariates are used to calculate the predictive mean.
 #' @examples
 #' \donttest{
 #' if (torch::torch_is_installed()) {
@@ -201,8 +220,8 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
   # Input checking for calc_pred_moments ------------------------------------
 
   # Check that mod is a shrinkGPR object
-  if (!any(class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR"))) {
-    stop("The argument 'object' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
+  if (!any(class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR", "shrinkMVTPR"))) {
+    stop("The argument 'object' must be an object of class 'shrinkGPR', 'shrinkTPR', 'shrinkMVGPR' or 'shrinkMVTPR'.")
   }
 
 
@@ -239,8 +258,16 @@ calc_pred_moments <- function(object, newdata, nsamp = 100) {
 
   if (any(class(object) %in% c("shrinkGPR", "shrinkTPR"))) {
     res_tens <- object$model$calc_pred_moments(x_tens, nsamp, x_test_mean)
-    return(list(means = as.array(res_tens[[1]]),
-                vars = as.array(res_tens[[2]])))
+
+    res_list <- list(means = as.matrix(res_tens[[1]]),
+                vars = as.matrix(res_tens[[2]]))
+
+    if ("shrinkTPR" %in% class(object)) {
+      res_list$nu <- as.numeric(res_tens[[3]])
+    }
+
+    return(res_list)
+
   } else if ("shrinkMVGPR" %in% class(object)) {
     res_tens <- object$model$calc_pred_moments(x_tens, nsamp)
 
@@ -294,8 +321,8 @@ predict.shrinkGPR <- function(object, newdata, nsamp = 100, ...) {
   # Input checking for predict.shrinkGPR ------------------------------------
 
   # Check that mod is a shrinkGPR object
-  if (!any(class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR"))) {
-    stop("The argument 'object' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
+  if (!any(class(object) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR", "shrinkMVTPR"))) {
+    stop("The argument 'object' must be an object of class 'shrinkGPR', 'shrinkTPR', 'shrinkMVGPR' or 'shrinkMVTPR'.")
   }
 
   # Check that newdata, if provided, is a data frame
@@ -343,7 +370,7 @@ predict.shrinkGPR <- function(object, newdata, nsamp = 100, ...) {
 #'
 #' \code{predict.shrinkTPR} generates posterior predictive samples from a fitted \code{shrinkTPR} model at specified covariates.
 #'
-#' @param object A \code{shrinkTPR} object representing the fitted Gaussian process regression model.
+#' @param object A \code{shrinkTPR} object representing the fitted Student-t process regression model.
 #' @param newdata \emph{Optional} data frame containing the covariates for the prediction points. If missing, the training data is used.
 #' @param nsamp Positive integer specifying the number of posterior samples to generate. Default is 100.
 #' @param ... Currently ignored.
@@ -380,11 +407,12 @@ predict.shrinkTPR <- function(object, newdata, nsamp = 100, ...) {
 #'
 #' \code{predict.shrinkMVGPR} generates posterior predictive samples from a fitted \code{shrinkMVGPR} model at specified covariates.
 #'
-#' @param object A \code{shrinkMVGPR} object representing the fitted multivariate Gaussian process regression model.
+#' @param object A \code{shrinkMVGPR} or \code{shrinkMVTPR} object representing the fitted multivariate process regression model.
 #' @param newdata \emph{Optional} data frame containing the covariates for the prediction points. If missing, the training data is used.
 #' @param nsamp Positive integer specifying the number of posterior samples to generate. Default is 100.
 #' @param ... Currently ignored.
-#' @return A matrix containing posterior predictive samples for each covariate combination in \code{newdata}.
+#' @return A 3-dimensional array of dimensions \code{nsamp x N_new x M} containing posterior predictive samples
+#' for each covariate combination in \code{newdata}.
 #' @details
 #' This function generates predictions by sampling from the posterior predictive distribution.
 #' @examples
@@ -417,11 +445,11 @@ predict.shrinkMVGPR <- function(object, newdata, nsamp = 100, ...) {
 
 #' Generate Posterior Samples
 #'
-#' \code{gen_posterior_samples} generates posterior samples of the model parameters from a fitted \code{shrinkGPR} or \code{shrinkTPR} model.
+#' \code{gen_posterior_samples} generates posterior samples of the model parameters from a fitted \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR} or \code{shrinkMVTPR} model.
 #'
-#' @param mod A \code{shrinkGPR} object representing the fitted Gaussian process regression model.
+#' @param mod A \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR} or \code{shrinkMVTPR} object representing the fitted model.
 #' @param nsamp Positive integer specifying the number of posterior samples to generate. Default is 1000.
-#' @return A list containing posterior samples of the model parameters:
+#' @return For univariate models (\code{shrinkGPR}, \code{shrinkTPR}), a list containing posterior samples of the model parameters:
 #' \itemize{
 #'   \item \code{thetas}: A matrix of posterior samples for the inverse lengthscale parameters.
 #'   \item \code{sigma2}: A matrix of posterior samples for the noise variance.
@@ -429,8 +457,25 @@ predict.shrinkMVGPR <- function(object, newdata, nsamp = 100, ...) {
 #'   \item \code{betas} (optional): A matrix of posterior samples for the mean equation parameters (if included in the model).
 #'   \item \code{lambda_mean} (optional): A matrix of posterior samples for the mean equation's global shrinkage parameter (if included in the model).
 #' }
+#' Additionally, for a \code{shrinkTPR} model, the list also includes:
+#' \itemize{
+#'   \item \code{nu}: A matrix of posterior samples for the degrees of freedom parameter.
+#' }
+#' For multivariate models (\code{shrinkMVGPR}, \code{shrinkMVTPR}), the list contains:
+#' \itemize{
+#'   \item \code{thetas}: A matrix of posterior samples for the inverse lengthscale parameters.
+#'   \item \code{tau}: A matrix of posterior samples for the global shrinkage parameter for the kernel.
+#'   \item \code{sigma2}: A matrix of posterior samples for the noise variance.
+#'   \item \code{tau_Om}: A matrix of posterior samples for the global shrinkage parameter for the output covariance.
+#'   \item \code{Omega}: An array of posterior samples for the output covariance matrix.
+#' }
+#' Additionally, for a \code{shrinkMVTPR} model, the list also includes:
+#' \itemize{
+#'   \item \code{nu}: A matrix of posterior samples for the degrees of freedom parameter.
+#' }
 #' @details
-#' This function draws posterior samples from the latent space and transforms them into the parameter space of the model. These samples can be used for posterior inference or further analysis.
+#' This function draws posterior samples from the latent space and transforms them into the parameter space of the model. 
+#' These samples can be used for posterior inference or further analysis, such as examining which inverse lengthscale parameters pulled to zero.
 #' @examples
 #' \donttest{
 #' if (torch::torch_is_installed()) {
@@ -458,8 +503,8 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
   # Input checking for gen_posterior_samples -------------------------------
 
   # Check that mod is a shrinkGPR object
-  if (!any(class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR"))) {
-    stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR'.")
+  if (!any(class(mod) %in% c("shrinkGPR", "shrinkTPR", "shrinkMVGPR", "shrinkMVTPR"))) {
+    stop("The argument 'mod' must be an object of class 'shrinkGPR', 'shrinkTPR', 'shrinkMVGPR' or 'shrinkMVTPR'.")
   }
 
   # Check that nsamp is a positive integer
@@ -591,7 +636,7 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
 #' or by using a fixed values for the remaining covariates (if \code{fixed_x} is provided). The result is a set of conditional
 #' predictions that can be used to visualize the marginal effect of the selected covariates under varying input configurations.
 #'
-#' @param mod A \code{shrinkGPR}, \code{shrinkTPR} or \code{shrinkMVGPR} object representing the fitted Gaussian/t process regression model.
+#' @param mod A \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR} or \code{shrinkMVTPR} object representing the fitted Gaussian/t process regression model.
 #' @param to_eval A character vector specifying the names of the covariates to evaluate. Can be one or two variables.
 #' @param nsamp Positive integer specifying the number of posterior samples to generate. Default is 200.
 #' @param fixed_x \emph{optional} data frame specifying a fixed covariate configuration. If provided, this configuration is used for
@@ -630,11 +675,11 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
 #'   # Fit GPR model
 #'   res <- shrinkGPR(y ~ x1 + x2, data = data)
 #'
-#'   # Generate posterior samples
-#'   samps <- gen_posterior_samples(res, nsamp = 1000)
+#'   # Generate marginal samples for x1
+#'   marginal_samps <- gen_marginal_samples(res, to_eval = "x1", nsamp = 100)
 #'
-#'   # Plot the posterior samples
-#'   boxplot(samps$thetas)
+#'   # Plot marginal predictions
+#'   plot(marginal_samps)
 #'   }
 #' }
 #' @export
@@ -643,8 +688,8 @@ gen_marginal_samples <- function(mod, to_eval, nsamp = 200, fixed_x, n_eval_poin
   # Input checking ----------------------------------------------------------
 
   # Check that mod is a supported model object
-  if (!inherits(mod, c("shrinkGPR", "shrinkTPR", "shrinkMVGPR"))) {
-    stop("The argument 'mod' must be a 'shrinkGPR', 'shrinkTPR' or 'shrinkMVGPR' object.")
+  if (!inherits(mod, c("shrinkGPR", "shrinkTPR", "shrinkMVGPR", "shrinkMVTPR"))) {
+    stop("The argument 'mod' must be a 'shrinkGPR', 'shrinkTPR', 'shrinkMVGPR' or 'shrinkMVTPR' object.")
   }
 
   # Check that to_eval is a character vector of length 1 or 2
