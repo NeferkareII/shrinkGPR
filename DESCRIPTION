@@ -14,7 +14,6 @@ Description: Efficient variational inference methods for fully Bayesian univaria
   see Knaus (2025) <doi:10.48550/arXiv.2501.13173>.
 License: GPL (>= 2)
 Encoding: UTF-8
-LazyData: true
 Depends:
     R (>= 4.1.0)
 Imports:
