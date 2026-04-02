@@ -67,22 +67,18 @@ sylvester <- nn_module(
     reg <- 1/sqrt(self$d)
     self$both_R <- nn_parameter(torch_zeros(self$d, self$d)$uniform_(-reg, reg))
 
-    self$diag1 <- nn_parameter(torch_zeros(self$d)$uniform_(-reg, reg))
-    self$diag2 <- nn_parameter(torch_zeros(self$d)$uniform_(-reg, reg))
+    self$diag1 <- nn_parameter(torch_zeros(self$d))
+    self$diag2 <- nn_parameter(torch_zeros(self$d))
 
     self$Q <- nn_parameter(torch_zeros(self$n_householder, self$d)$uniform_(-reg, reg))
 
-    self$b <- nn_parameter(torch_zeros(self$d)$uniform_(-reg, reg))
+    self$b <- nn_parameter(torch_zeros(self$d))
 
     triu_mask <- torch_triu(torch_ones(self$d, self$d), diagonal = 1)$requires_grad_(FALSE)
     identity <- torch_eye(self$d, self$d)$requires_grad_(FALSE)
 
     self$triu_mask <- nn_buffer(triu_mask)
     self$identity <- nn_buffer(identity)
-
-    self$register_buffer("triu_mask", triu_mask)
-    self$register_buffer("eye", identity)
-
   },
 
   der_tanh = function(x) {

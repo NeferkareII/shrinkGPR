@@ -21,53 +21,46 @@ lightweight_ols <- function(y, x) {
 # Function currently only works for batched matrices
 # If to be used for single matrices, do torch_unsqueeze(A, 1) before calling the function
 robust_chol <- function(A, tol = 1e-6, upper = FALSE) {
+  A <- 0.5 * (A + A$permute(c(1, 3, 2)))
+  N <- A$size(2)
+  B <- A$size(1)
 
+  # Fast path for well-conditioned matrices
   Lower <- linalg_cholesky_ex(A)
+  if (!Lower$info$any()$item()) {
+    return(if (upper) Lower$L$permute(c(1, 3, 2)) else Lower$L)
+  }
 
-  if (Lower$info$any()$item()) {
-    # First fallback - jittering
-    jitter <- tol
-    sucess <- FALSE
-    while (!sucess & jitter < 2) {
-      Lower <- linalg_cholesky_ex(A + jitter * torch_eye(A$size(2), device = A$device))
+  # Quick jitter: 3 attempts with aggressive jumps
+  I <- torch_eye(N, device = A$device)$unsqueeze(1)$expand(c(B, N, N))
+  diag_mean <- torch_mean(torch_diagonal(A, dim1 = 2, dim2 = 3), dim = 2)
+  jitter <- tol
 
-      if (!Lower$info$any()$item()) {
-        sucess <- TRUE
-      } else {
-        jitter <- jitter * 2
-      }
+  for (i in 1:3) {
+    Lower <- linalg_cholesky_ex(A + I * (jitter * diag_mean)$view(c(-1, 1, 1)))
+    if (!Lower$info$any()$item()) {
+      return(if (upper) Lower$L$permute(c(1, 3, 2)) else Lower$L)
     }
+    jitter <- jitter * 100
   }
 
+  # Eigenvalue fallback with tight safety margin
+  shift <- with_no_grad({
+    evals <- linalg_eigvalsh(A)
+    min_e <- torch_min(evals, dim = 2)[[1]]
+    torch_clamp(-min_e + tol, min = 0.0)
+  })
+  shift <- 1.1 * shift + tol
+  Lower <- linalg_cholesky_ex(A + I * shift$view(c(-1, 1, 1)))
+
+  # Float32 eigvals may be imprecise, one more aggressive attempt
   if (Lower$info$any()$item()) {
-    # Second fallback - eigen decomposition
-    eigen_result <- linalg_eigh(A)
-    evals <- eigen_result[[1]]
-    evecs <- eigen_result[[2]]
-
-    evals[evals < tol] <- tol
-
-    # Reconstruct A_star
-    A_star <- torch_bmm(
-      torch_bmm(evecs, torch_diag_embed(evals, dim1 = -2, dim2 = -1)),
-      evecs$permute(c(1, 3, 2))
-    )
-
-    # Cholesky decomposition
-    Lower <- linalg_cholesky_ex(A_star)
+    shift <- 2.0 * shift + 1e-3
+    Lower <- linalg_cholesky_ex(A + I * shift$view(c(-1, 1, 1)))
   }
 
-  # Give up and crawl into a hole
-  if (Lower$info$any()$item()) {
-    stop("Cholesky decomposition failed")
-  }
-
-
-  if (upper) {
-    return(Lower$L$permute(1, 3, 2))
-  } else {
-    return(Lower$L)
-  }
+  if (Lower$info$any()$item()) stop("Cholesky decomposition failed")
+  if (upper) Lower$L$permute(c(1, 3, 2)) else Lower$L
 }
 
 # Prevents values from being too close to zero
@@ -168,3 +161,56 @@ lty_input_bad <- function(x){
   }
 }
 
+is_correlation_matrix <- function(R, tol = 1e-8) {
+  if (!is.matrix(R)) return(FALSE)
+  if (nrow(R) != ncol(R)) return(FALSE)
+
+  # symmetry
+  if (max(abs(R - t(R))) > tol) return(FALSE)
+
+  # unit diagonal
+  if (max(abs(diag(R) - 1)) > tol) return(FALSE)
+
+  # bounds
+  if (any(R < -1 - tol | R > 1 + tol)) return(FALSE)
+
+  # positive definiteness
+  !inherits(try(chol(R), silent = TRUE), "try-error")
+}
+
+rlkjcorr <- function(n, K, eta = 1) {
+  stopifnot(is.numeric(K), K >= 2, K == as.integer(K))
+  stopifnot(all(eta > 0))
+  stopifnot(length(eta) == 1L || length(eta) == n)
+
+  alpha <- eta + (K - 2) / 2
+
+  r12 <- 2 * rbeta(n, alpha, alpha) - 1
+  R <- array(0, dim = c(K, K, n))  # upper-triangular Cholesky factor (per draw)
+
+  R[1, 1, ] <- 1
+  R[1, 2, ] <- r12
+  R[2, 2, ] <- sqrt(1 - r12^2)
+
+  if (K > 2) {
+    for (m in 2:(K - 1)) {
+      alpha <- alpha - 0.5
+      y <- rbeta(n, shape1 = m / 2, shape2 = alpha)  # length n
+
+      # n independent unit vectors in R^m: columns are draws
+      z <- matrix(rnorm(m * n), nrow = m, ncol = n)
+      z <- z / rep(sqrt(colSums(z^2)), each = m)
+
+      # fill column (m+1) for all draws
+      R[1:m, m + 1, ] <- sweep(z, 2, sqrt(y), `*`)
+      R[m + 1, m + 1, ] <- sqrt(1 - y)
+    }
+  }
+
+  # correlation matrices: for each draw i, crossprod(R[,,i]) = t(R)%*%R
+  out <- array(0, dim = c(K, K, n))
+  for (i in 1:n) out[, , i] <- crossprod(R[, , i])
+
+  if (n == 1L) out <- out[, , 1]
+  out
+}

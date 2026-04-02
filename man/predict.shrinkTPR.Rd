@@ -7,7 +7,7 @@
 \method{predict}{shrinkTPR}(object, newdata, nsamp = 100, ...)
 }
 \arguments{
-\item{object}{A \code{shrinkTPR} object representing the fitted Gaussian process regression model.}
+\item{object}{A \code{shrinkTPR} object representing the fitted Student-t process regression model.}
 
 \item{newdata}{\emph{Optional} data frame containing the covariates for the prediction points. If missing, the training data is used.}
 
@@ -19,7 +19,7 @@
 A matrix containing posterior predictive samples for each covariate combination in \code{newdata}.
 }
 \description{
-\code{predict.shrinkTPR} generates posterior predictive samples from a fitted \code{shrinkGPR} model at specified covariates.
+\code{predict.shrinkTPR} generates posterior predictive samples from a fitted \code{shrinkTPR} model at specified covariates.
 }
 \details{
 This function generates predictions by sampling from the posterior predictive distribution. If the mean equation is included in the model, the corresponding covariates are incorporated.
@@ -36,7 +36,7 @@ if (torch::torch_is_installed()) {
   data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
 
   # Fit GPR model
-  res <- shrinkGPR(y ~ x1 + x2, data = data)
+  res <- shrinkTPR(y ~ x1 + x2, data = data)
   # Example usage for in-sample prediction
   preds <- predict(res)
 

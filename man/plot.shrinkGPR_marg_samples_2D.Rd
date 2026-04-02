@@ -2,7 +2,7 @@
 % Please edit documentation in R/plot_functions.R
 \name{plot.shrinkGPR_marg_samples_2D}
 \alias{plot.shrinkGPR_marg_samples_2D}
-\title{Plot method for 2D marginal predictions from \code{shrinkGPR}}
+\title{Plot method for 2D marginal predictions}
 \usage{
 \method{plot}{shrinkGPR_marg_samples_2D}(x, ...)
 }
@@ -27,6 +27,7 @@ Note: The \pkg{plotly} package must be installed to use this function.
 }
 \examples{
 \donttest{
+if (torch::torch_is_installed()) {
 # Simulate data
 set.seed(123)
 torch::torch_manual_seed(123)
@@ -58,6 +59,7 @@ p |> plotly::layout(
   )
 )
 }
+}
 
 }
 \seealso{
@@ -66,6 +68,7 @@ p |> plotly::layout(
 Other plotting functions: 
 \code{\link{plot.shrinkGPR}()},
 \code{\link{plot.shrinkGPR_marg_samples_1D}()},
+\code{\link{plot.shrinkMVGPR}()},
 \code{\link{plot.shrinkTPR}()}
 }
 \author{

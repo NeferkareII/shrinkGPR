@@ -6,13 +6,15 @@
 #'
 #' @importFrom progress progress_bar
 #'
-#' @importFrom stats model.response model.matrix model.frame rnorm na.pass delete.response .getXlevels pt rgamma median
+#' @importFrom stats model.response model.matrix model.frame rnorm na.pass delete.response .getXlevels pt rgamma median rbeta
 #'
 #' @importFrom methods formalArgs
 #'
-#' @importFrom utils packageVersion getFromNamespace
+#' @importFrom utils packageVersion getFromNamespace zip unzip
 #'
 #' @importFrom graphics boxplot
+#'
+#' @importFrom mniw rMT
 #'
 #'
 ## usethis namespace: end
@@ -58,7 +60,7 @@ def sylvester_full(
     n_householder: List[int]
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     Q_t = Q_param.transpose(0, 1)
-    norms = torch.norm(Q_t, p=2, dim=0, keepdim=True)
+    norms = torch.norm(Q_t, p=2, dim=0, keepdim=True).clamp_min(1e-8)
     V = Q_t / norms
     d = V.size(0)
     Q = torch.eye(d, device=z.device)
@@ -82,20 +84,12 @@ def sqdist(
     thetas: torch.Tensor,
     x_star: Optional[torch.Tensor]
 ) -> torch.Tensor:
-
-    X_thetas = x.unsqueeze(2) * torch.sqrt(thetas.transpose(0, 1))
-    sq = torch.sum(X_thetas ** 2, dim=1, keepdim=True)
-
+    x_scaled = x.unsqueeze(0) * torch.sqrt(thetas.unsqueeze(1))
     if x_star is None:
-        sqdist = ((sq + sq.permute(1, 0, 2)).permute(2, 0, 1) -
-          2 * torch.bmm(X_thetas.permute(2, 0, 1), X_thetas.permute(2, 1, 0)))
+        return torch.cdist(x_scaled, x_scaled, p=2.0).pow(2)
     else:
-        X_star_thetas = x_star.unsqueeze(2) * torch.sqrt(thetas.transpose(0, 1))
-        sq_star = torch.sum(X_star_thetas ** 2, dim=1, keepdim=True)
-        sqdist = ((sq_star + sq.permute(1, 0, 2)).permute(2, 0, 1) -
-          2 * torch.bmm(X_star_thetas.permute(2, 0, 1), X_thetas.permute(2, 1, 0)))
-
-    return sqdist
+        x_star_scaled = x_star.unsqueeze(0) * torch.sqrt(thetas.unsqueeze(1))
+        return torch.cdist(x_star_scaled, x_scaled, p=2.0).pow(2)
 
 def ldnorm(
     K: torch.Tensor,
@@ -172,6 +166,18 @@ def ldt(
     log_lik = torch.lgamma((nu + N)*0.5) - 0.5 * N * torch.log(nu - 2) - torch.lgamma(0.5 * nu) -0.5 * slogdet - 0.5 * (nu + N) * torch.log(1 + 1/(nu - 2) * quad)
     return log_lik
 
+def make_tril(
+    x: torch.Tensor,
+    size: List[int]
+) -> torch.Tensor:
+
+    size_int = int(size[0])
+    tril_indices = torch.tril_indices(size_int, size_int, device=x.device, offset = -1)
+    A = torch.zeros(x.shape[0], size_int, size_int, device=x.device)
+    A[:, tril_indices[0], tril_indices[1]] = x[:, 0:(size_int*(size_int-1)//2)]
+
+    return  A
+
 def kernel_se(thetas: torch.Tensor, tau: torch.Tensor, x: torch.Tensor, x_star: Optional[torch.Tensor]) -> torch.Tensor:
     D = sqdist(x, thetas, x_star)
     return (1.0 / tau.unsqueeze(1).unsqueeze(2)) * torch.exp(-0.5 * D)
@@ -189,6 +195,36 @@ def kernel_matern_52(thetas: torch.Tensor, tau: torch.Tensor, x: torch.Tensor, x
     D = torch.sqrt(sqdist(x, thetas, x_star) + 1e-4)
     sqrt5 = 5.0 ** 0.5
     return (1.0 / tau.unsqueeze(1).unsqueeze(2)) * (1 + sqrt5 * D + (5.0 / 3.0) * D ** 2) * torch.exp(-sqrt5 * D)
+
+
+# New functions for multivariate outputs
+
+def ldnorm_multi(
+    L_K: torch.Tensor,
+    L_Om: torch.Tensor,
+    y: torch.Tensor,
+    M: List[int],
+    N: List[int]
+) -> torch.Tensor:
+    n_latent = L_K.size(0)
+    M_int = M[0]
+    N_int = N[0]
+
+    alpha = torch.cholesky_solve(y.unsqueeze(0).expand(n_latent, N_int, M_int), L_K, upper=False)
+    Yt = y.t().unsqueeze(0).expand(n_latent, M_int, N_int)
+    B = torch.bmm(Yt, alpha)
+    Om_inv_B = torch.cholesky_solve(B, L_Om, upper=False)
+    tr = -0.5 * torch.sum(torch.diagonal(Om_inv_B, dim1=-2, dim2=-1), dim=1)
+
+    diag_K = torch.diagonal(L_K, dim1=-2, dim2=-1)
+    diag_Om = torch.diagonal(L_Om, dim1=-2, dim2=-1)
+
+    slogdet_K = 2.0 * torch.sum(torch.log(diag_K), dim=1)
+    slogdet_Om = 2.0 * torch.sum(torch.log(diag_Om), dim=1)
+
+    log_lik = -0.5 * float(M_int) * slogdet_K - 0.5 * float(N_int) * slogdet_Om + tr
+    return log_lik
 ")
   }
 }
+

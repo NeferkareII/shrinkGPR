@@ -1,22 +1,27 @@
-#' Gaussian Process Regression with Shrinkage and Normalizing Flows
+#' Multivariate Student-t Process Regression with Shrinkage and Normalizing Flows
 #'
-#' Fits a Gaussian process regression (GPR) model to an \eqn{N \times 1} response vector \eqn{Y}.
-#' The joint distribution is multivariate normal \eqn{Y \sim \mathcal{N}(0,\, K + \sigma^2 I)}, where \eqn{K} is the GP kernel matrix
-#' with triple-gamma shrinkage priors on the inverse length-scales. Covariates whose length-scales are shrunk to zero have no influence on the
-#' covariance structure. An optional linear mean \eqn{x_\mu^\top \beta} can be added via \code{formula_mean}.
-#' The joint posterior is approximated by normalizing flows trained to maximize the ELBO.
+#' Fits a multivariate Student-t process regression (MVTPR) model to an \eqn{N \times M} response matrix \eqn{Y}. The joint
+#' distribution is matrix-variate Student-t, \eqn{Y \sim \mathcal{MT}(\nu,\, 0,\, K + \sigma^2 I,\, \Omega)}, where \eqn{K} is
+#' the GP kernel matrix with triple-gamma shrinkage priors on the inverse length-scales, \eqn{\Omega} is the \eqn{M \times M}
+#' output covariance, and \eqn{\nu} is the degrees of freedom parameter. Compared to \code{\link{shrinkMVGPR}}, the heavier tails
+#' provide greater robustness to outliers. The joint posterior is approximated by normalizing flows trained to maximize the ELBO.
 #'
 #' @param formula object of class "formula": a symbolic representation of the model for the covariance equation, as in \code{\link{lm}}.
-#' The response variable and covariates are specified here.
+#' The response variable and covariates are specified here. Specifically, the response is created by binding the \eqn{M} response variables together with 
+#' \code{cbind()} on the left-hand side of the formula, e.g., \code{cbind(y1, y2) ~ x}.
 #' @param data \emph{optional} data frame containing the response variable and the covariates. If not found in \code{data},
 #' the variables are taken from \code{environment(formula)}. No \code{NA}s are allowed in the response variable or covariates.
 #' @param a positive real number controlling the behavior at the origin of the shrinkage prior for the covariance structure. The default is 0.5.
 #' @param c positive real number controlling the tail behavior of the shrinkage prior for the covariance structure. The default is 0.5.
-#' @param formula_mean \emph{optional} formula for the linear mean equation. If provided, the covariates for the mean structure
-#' are specified separately from the covariance structure. A response variable is not required in this formula.
-#' @param a_mean positive real number controlling the behavior at the origin of the shrinkage for the mean structure. The default is 0.5.
-#' @param c_mean positive real number controlling the tail behavior of the shrinkage prior for the mean structure. The default is 0.5.
+#' @param eta positive real number controlling the concentration of the LKJ prior on the correlation matrix of the output covariance.
+#' Higher values push the prior towards the identity matrix. The default is 4.
+#' @param a_Om positive real number controlling the behavior at the origin of the shrinkage prior for the output covariance scale parameters. The default is 0.5.
+#' @param c_Om positive real number controlling the tail behavior of the shrinkage prior for the output covariance scale parameters. The default is 0.5.
 #' @param sigma2_rate positive real number controlling the prior rate parameter for the residual variance. The default is 10.
+#' @param nu_alpha positive real number controlling the shape parameter of the gamma prior for the degrees of freedom of the
+#' matrix-t process. The default is 0.5.
+#' @param nu_beta positive real number controlling the rate parameter of the shifted gamma prior for the degrees of freedom of the
+#' matrix-t process. The default is 2.
 #' @param kernel_func function specifying the covariance kernel. The default is \code{\link{kernel_se}}, a squared exponential kernel.
 #' For guidance on how to provide a custom kernel function, see Details.
 #' @param n_layers positive integer specifying the number of flow layers in the normalizing flow. The default is 10.
@@ -27,13 +32,13 @@
 #' For guidance on how to provide a custom flow function, see Details.
 #' @param n_epochs positive integer specifying the number of training epochs. The default is 1000.
 #' @param auto_stop logical value indicating whether to enable early stopping based on convergence. The default is \code{TRUE}.
-#' @param cont_model \emph{optional} object returned from a previous \code{shrinkGPR} call, enabling continuation of training from the saved state.
+#' @param cont_model \emph{optional} object returned from a previous \code{shrinkMVTPR} call, enabling continuation of training from the saved state.
 #' @param device \emph{optional} device to run the model on, e.g., \code{torch_device("cuda")} for GPU or \code{torch_device("cpu")} for CPU.
 #' Defaults to GPU if available; otherwise, CPU.
 #' @param display_progress logical value indicating whether to display progress bars and messages during training. The default is \code{TRUE}.
 #' @param optim_control \emph{optional} named list containing optimizer parameters. If not provided, default settings are used.
 #'
-#' @return A list object of class \code{shrinkGPR}, containing:
+#' @return A list object of classes \code{shrinkMVGPR} and \code{shrinkMVTPR}, containing:
 #' \item{\code{model}}{The best-performing trained model.}
 #' \item{\code{loss}}{The best loss value (ELBO) achieved during training.}
 #' \item{\code{loss_stor}}{A numeric vector storing the ELBO values at each training iteration.}
@@ -44,57 +49,48 @@
 #' @details
 #' \strong{Model Specification}
 #'
-#' Given \eqn{N} observations with \eqn{d}-dimensional covariates \eqn{x_i}, the model is
-#' \deqn{y_i = f(x_i) + \varepsilon_i, \quad \varepsilon_i \overset{iid}{\sim} \mathcal{N}(0, \sigma^2),}
-#' \deqn{f \sim \mathcal{GP}(\mu(\cdot),\; k(\cdot, \cdot\,;\, \theta, \tau)).}
+#' Given \eqn{N} observations with \eqn{d}-dimensional covariates and \eqn{M} response variables, the response matrix
+#' \eqn{Y \in \mathbb{R}^{N \times M}} follows a matrix-variate Student-t distribution:
+#' \deqn{Y \sim \mathcal{MT}_{N,M}(\nu,\; 0,\; K(\theta, \tau) + \sigma^2 I_N,\; \Omega),}
+#' which is equivalent to
+#' \deqn{\mathrm{vec}(Y) \sim t_{NM}\!\left(\nu,\; \mathbf{0},\; \Omega \otimes (K + \sigma^2 I_N)\right).}
+#' Here \eqn{K_{ij} = k(x_i, x_j;\, \theta, \tau)} is the kernel matrix and \eqn{\Omega} is the \eqn{M \times M}
+#' between-response covariance. The output covariance is parameterized as \eqn{\Omega = S D S}, where
+#' \eqn{D} is a correlation matrix and \eqn{S = \mathrm{diag}(s_1, \ldots, s_M)} contains the marginal standard deviations.
+#' The product of the diagonal elements of \eqn{S} is constrained to equal 1 to ensure identifiability.
 #' The default squared exponential kernel is
 #' \deqn{k(x, x';\, \theta, \tau) = \frac{1}{\tau} \exp\!\left(-\frac{1}{2} \sum_{j=1}^d \theta_j (x_j - x'_j)^2\right),}
 #' where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{\tau > 0} is the output scale. 
-#' Users can specify custom kernels by following the guidelines below, or use one of the other provided kernel functions in \code{\link{kernel_functions}}.
-#' If \code{formula_mean} is provided, the GP mean becomes \eqn{x_{\mu,i}^\top \beta} instead of zero.
-#'
+#' Users can specify custom kernels by following the guidelines below, or use one of the other provided kernel functions in 
+#' \code{\link{kernel_functions}}.
+#' 
 #' \strong{Priors}
 #'
-#' The triple-gamma (TG) prior (Cadonna et al. 2020) induces sparsity on inactive length-scales:
 #' \deqn{\theta_j \mid \tau \sim \mathrm{TG}(a, c, \tau), \quad j = 1, \ldots, d,}
 #' \deqn{\tau \sim F(2c, 2a),}
-#' \deqn{\sigma^2 \sim \mathrm{Exp}(\sigma^2_\mathrm{rate}).}
-#' With a mean structure, the regression coefficients receive a normal-gamma-gamma (NGG) prior:
-#' \deqn{\beta_k \mid \tau_\mu \sim \mathrm{NGG}(a_\mu, c_\mu, \tau_\mu), \quad \tau_\mu \sim F(2c_\mu, 2a_\mu).}
-#' Parameters \eqn{a} and \eqn{c} jointly control the spike at zero (\eqn{a}) and the tail decay (\eqn{c}) of the prior.
+#' \deqn{\sigma^2 \sim \mathrm{Exp}(\sigma^2_\mathrm{rate}),}
+#' \deqn{D \sim \mathrm{LKJ}(\eta),}
+#' \deqn{s_m \mid \tau_\Omega \sim \mathrm{TG}(a_\Omega, c_\Omega, \tau_\Omega), \quad m = 1, \ldots, M,}
+#' \deqn{\tau_\Omega \sim F(2c_\Omega, 2a_\Omega),}
+#' \deqn{\nu - 2 \sim \mathrm{Gamma}(\nu_\alpha, \nu_\beta).}
+#' The shift by 2 ensures \eqn{\nu > 2} so that the process covariance is finite.
 #'
 #' \strong{Inference}
 #'
-#' The posterior is approximated by a normalizing flow \eqn{q_\phi} trained to maximize the ELBO. The default flow is a 
-#' Sylvester flow (van den Berg et al. 2018), but users can specify custom flows by following the guidelines below.
+#' The posterior is approximated by a normalizing flow \eqn{q_\phi} trained to maximize the ELBO.
 #' \code{auto_stop} triggers early stopping when the ELBO shows no significant improvement over the last 100 iterations.
 #'
 #' \strong{Custom Kernel Functions}
 #'
 #' Users can define custom kernel functions by passing them to the \code{kernel_func} argument.
-#' A valid kernel function must follow the same structure as \code{\link{kernel_se}}. The function should:
+#' A valid kernel function must follow the same structure as \code{\link{kernel_se}}. The function must:
 #'
 #' \enumerate{
-#' \item \strong{Accept the following arguments:}
-#'   \itemize{
-#'     \item \code{thetas}: A \code{torch_tensor} of dimensions \code{n_latent x d}, representing latent length-scale parameters.
-#'     \item \code{tau}: A \code{torch_tensor} of length \code{n_latent}, representing latent scaling factors.
-#'     \item \code{x}: A \code{torch_tensor} of dimensions \code{N x d}, containing the input data points.
-#'     \item \code{x_star}: Either \code{NULL} or a \code{torch_tensor} of dimensions \code{N_new x d}. If \code{NULL}, the kernel is computed for \code{x} against itself.
-#'     Otherwise, it computes the kernel between \code{x} and \code{x_star}.
-#'   }
-#'
-#' \item \strong{Return:}
-#'   \itemize{
-#'     \item If \code{x_star = NULL}: a \code{torch_tensor} of dimensions \code{n_latent x N x N}.
-#'     \item If \code{x_star} is provided: a \code{torch_tensor} of dimensions \code{n_latent x N_new x N}.
-#'   }
-#'
-#' \item \strong{Requirements:}
-#'   \itemize{
-#'     \item The kernel must produce a valid positive semi-definite covariance matrix.
-#'     \item Use \code{torch} tensor operations to ensure GPU/CPU compatibility.
-#'   }
+#'   \item Accept arguments \code{thetas} (\code{n_latent x d}), \code{tau} (length \code{n_latent}),
+#'     \code{x} (\code{N x d}), and optionally \code{x_star} (\code{N_new x d}).
+#'   \item Return a \code{torch_tensor} of dimensions \code{n_latent x N x N} (if \code{x_star = NULL})
+#'     or \code{n_latent x N_new x N} (if \code{x_star} is provided).
+#'   \item Produce a valid positive semi-definite covariance matrix using \code{torch} tensor operations.
 #' }
 #'
 #' See \code{\link{kernel_functions}} for documented examples.
@@ -102,75 +98,61 @@
 #' \strong{Custom Flow Functions}
 #'
 #' Users can define custom flow functions by implementing an \code{nn_module} in \code{torch}.
-#' The module must have a \code{forward} method that accepts a tensor \code{z} of shape \code{n_latent x D} and returns a list with:
+#' The module must have a \code{forward} method that accepts a tensor \code{z} of shape \code{n_latent x D}
+#' and returns a list with:
 #' \itemize{
 #'   \item \code{zk}: the transformed samples, shape \code{n_latent x D}.
-#'   \item \code{log_diag_j}: the log-absolute-determinant of the Jacobian, shape \code{n_latent}.
+#'   \item \code{log_diag_j}: log-absolute-determinant of the Jacobian, shape \code{n_latent}.
 #' }
+#'
 #' See \code{\link{sylvester}} for a documented example.
 #'
 #' @examples
 #' \donttest{
 #' if (torch::torch_is_installed()) {
-#'   # Simulate data
-#'   set.seed(123)
+#'   # Simulate multivariate data
 #'   torch::torch_manual_seed(123)
-#'   n <- 100
-#'   x <- matrix(runif(n * 2), n, 2)
-#'   y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
-#'   data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
+#'   sim <- simMVGPR(N = 100, M = 2, d = 2)
 #'
-#'   # Fit GPR model
-#'   res <- shrinkGPR(y ~ x1 + x2, data = data)
+#'   # Fit MVTPR model
+#'   res <- shrinkMVTPR(cbind(y.1, y.2) ~ x.1 + x.2, data = sim$data)
 #'
 #'   # Check convergence
 #'   plot(res$loss_stor, type = "l", main = "Loss Over Iterations")
 #'
-#'   # Check posterior
+#'   # Check posterior of length-scale parameters
 #'   samps <- gen_posterior_samples(res, nsamp = 1000)
-#'   boxplot(samps$thetas) # Second theta is pulled towards zero
+#'   boxplot(samps$thetas)
 #'
-#'   # Predict
-#'   x1_new <- seq(from = 0, to = 1, length.out = 100)
-#'   x2_new <- runif(100)
-#'   y_new <- predict(res, newdata = data.frame(x1 = x1_new, x2 = x2_new), nsamp = 2000)
-#'
-#'   # Plot
-#'   quants <- apply(y_new, 2, quantile, c(0.025, 0.5, 0.975))
-#'   plot(x1_new, quants[2, ], type = "l", ylim = c(-1.5, 1.5),
-#'         xlab = "x1", ylab = "y", lwd = 2)
-#'   polygon(c(x1_new, rev(x1_new)), c(quants[1, ], rev(quants[3, ])),
-#'         col = adjustcolor("skyblue", alpha.f = 0.5), border = NA)
-#'   points(x[,1], y)
-#'   curve(sin(2 * pi * x), add = TRUE, col = "forestgreen", lwd = 2, lty = 2)
-#'
-#'
-#'
-#'   # Add mean equation
-#'   res2 <- shrinkGPR(y ~ x1 + x2, formula_mean = ~ x1, data = data)
+#'   # Predict at new covariate values
+#'   newdata <- data.frame(x.1 = runif(10), x.2 = runif(10))
+#'   y_new <- predict(res, newdata = newdata, nsamp = 500)
+#'   # y_new is an array of shape nsamp x N_new x M
 #'   }
 #' }
 #' @export
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
-shrinkGPR <- function(formula,
-                      data,
-                      a = 0.5,
-                      c = 0.5,
-                      formula_mean,
-                      a_mean = 0.5,
-                      c_mean = 0.5,
-                      sigma2_rate = 10,
-                      kernel_func = kernel_se,
-                      n_layers = 10,
-                      n_latent = 10,
-                      flow_func = sylvester,
-                      flow_args,
-                      n_epochs = 1000,
-                      auto_stop = TRUE,
-                      cont_model,
-                      device,
-                      display_progress = TRUE,
-                      optim_control) {
+shrinkMVTPR <- function(formula,
+                        data,
+                        a = 0.5,
+                        c = 0.5,
+                        eta = 4,
+                        a_Om = 0.5,
+                        c_Om = 0.5,
+                        sigma2_rate = 10,
+                        nu_alpha = 0.5,
+                        nu_beta = 2,
+                        kernel_func = kernel_se,
+                        n_layers = 10,
+                        n_latent = 10,
+                        flow_func = sylvester,
+                        flow_args,
+                        n_epochs = 1000,
+                        auto_stop = TRUE,
+                        cont_model,
+                        device,
+                        display_progress = TRUE,
+                        optim_control) {
 
   # Input checking ----------------------------------------------------------
 
@@ -188,8 +170,7 @@ shrinkGPR <- function(formula,
   to_check_numeric <- list(
     a = a,
     c = c,
-    a_mean = a_mean,
-    c_mean = c_mean,
+    eta = eta,
     sigma2_rate = sigma2_rate
   )
 
@@ -242,7 +223,7 @@ shrinkGPR <- function(formula,
 
   # Check continuation model (if provided)
   if (!missing(cont_model) && !is.list(cont_model)) {
-    stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkGPR' call.")
+    stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkMVGPR' call.")
   }
 
   # Check device
@@ -255,11 +236,6 @@ shrinkGPR <- function(formula,
     stop("The argument 'optim_control', if provided, must be a named list.")
   }
 
-  # Check mean formula
-  if (!missing(formula_mean) && !inherits(formula_mean, "formula")) {
-    stop("The argument 'formula_mean', if provided, must be of class 'formula'.")
-  }
-
   if (!missing(device)) {
     if (!inherits(device, "torch_device")) {
       stop("The argument 'device', if provided, must be a valid 'torch_device' object.")
@@ -267,8 +243,8 @@ shrinkGPR <- function(formula,
   }
 
   if (!missing(cont_model)) {
-    if (!inherits(cont_model, "shrinkGPR")) {
-      stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkGPR' call.")
+    if (!inherits(cont_model, "shrinkMVTPR")) {
+      stop("The argument 'cont_model', if provided, must be a list returned by a previous 'shrinkMVTPR' call.")
     }
   }
 
@@ -310,26 +286,6 @@ shrinkGPR <- function(formula,
     stop("No NA values are allowed in covariates")
   }
 
-  # For mean equation
-  if (!missing(formula_mean)) {
-    mf_mean <- model.frame(formula = formula_mean, data = data, drop.unused.levels = TRUE, na.action = na.pass)
-    mt_mean <- attr(x = mf_mean, which = "terms")
-
-    # Create Matrix X with dummies and transformations
-    x_mean <- model.matrix(object = mt_mean, data = mf_mean)
-
-    # Check that there are no NAs in x_mean
-    if (any(is.na(x_mean))) {
-      stop("No NA values are allowed in covariates for the mean equation")
-    }
-
-    colnames(x_mean)[colnames(x_mean) == "(Intercept)"] <- "Intercept"
-    x_mean_colnames <- colnames(x_mean)
-  } else {
-    x_mean <- NULL
-  }
-
-
   if (missing(cont_model)) {
 
     # Print initializing parameters message
@@ -344,22 +300,20 @@ shrinkGPR <- function(formula,
     # d is always handled internally
     flow_args_merged$d <- NULL
 
-    # Create y, x and x_mean tensors
+    # Create y, x tensors
     y <- torch_tensor(y, device = device)
     x <- torch_tensor(x, device = device)
 
-    if (!is.null(x_mean)) {
-      x_mean <- torch_tensor(x_mean, device = device)
-    }
 
-    model <- GPR_class(y, x, x_mean, a = a, c = c, a_mean = a_mean, c_mean = c_mean,
-                       sigma2_rate = sigma2_rate, n_layers, flow_func, flow_args_merged,
-                       kernel_func = kernel_func, device)
+    model <- MVTPR_class(y, x,  a = a, c = c, eta = eta, a_Om = a_Om, c_Om = c_Om,
+                         nu_alpha = nu_alpha, nu_beta = nu_beta,
+                         sigma2_rate = sigma2_rate, n_layers, flow_func, flow_args_merged,
+                         kernel_func = kernel_func, device)
 
     # Merge user and default optim_control
     if (missing(optim_control)) optim_control <- list()
     default_optim_params <- formals(optim_adam)
-    default_optim_params$lr <- 1e-3
+    default_optim_params$lr <- 1e-4
     default_optim_params$weight_decay <- 1e-3
     default_optim_params$params <- model$parameters
     optim_control_merged <- list_merger(default_optim_params, optim_control)
@@ -390,10 +344,18 @@ shrinkGPR <- function(formula,
   # Number of iterations to check for significant improvement
   n_check <- 100
 
+  # Rolling window parameters for adaptive skip-step rule
+  # Rolling window size
+  w <- 50L
+  # Multiplier for MAD to set cap
+  k_mad <- 10
+  # safety floor so cap doesn't get too small early
+  cap_min <- 1e4
+
   # Initialize a variable to track whether the loop exited normally or due to interruption
   stop_reason <- "max_iterations"
   runtime <- system.time({
-    tryCatch({
+    # tryCatch({
       for (i in 1:n_epochs) {
 
         # Sample from base distribution
@@ -404,19 +366,25 @@ shrinkGPR <- function(formula,
         zk_pos <- zk_log_det_J$zk
         log_det_J <- zk_log_det_J$log_det_J
 
+
         # Calculate loss, i.e. ELBO
         # suppressWarnings because torchscript does not yet support torch.linalg.cholesky
         loss <- suppressMessages(-model$elbo(zk_pos, log_det_J))
-        loss_stor[i] <- loss$item()
 
         # Zero gradients
         optimizer$zero_grad()
 
         # Compute gradients, i.e. backprop
-        loss$backward(retain_graph = FALSE)
+        loss$backward()
+
+        # Clip gradients to avoid exploding gradients
+        nn_utils_clip_grad_norm_(model$parameters, max_norm = 0.5)
 
         # Update parameters
         optimizer$step()
+
+        # Store loss value
+        loss_stor[i] <- loss$item()
 
         # Check if model is best
         if (i == 1) {
@@ -467,19 +435,19 @@ shrinkGPR <- function(formula,
           pb$tick(tokens = list(message = curr_message))
         }
       }
-    }, interrupt = function(ex) {
-      stop_reason <<- "interrupted"
-      if (display_progress) {
-        pb$terminate()
-      }
-      message("\nTraining interrupted at iteration ", i, ". Returning model trained so far.")
-    }, error = function(ex) {
-      stop_reason <<- "error"
-      if (display_progress) {
-        pb$terminate()
-      }
-      message("\nError occurred at iteration ", i, ". Returning model trained so far.")
-    })
+    # }, interrupt = function(ex) {
+    #   stop_reason <<- "interrupted"
+    #   if (display_progress) {
+    #     pb$terminate()
+    #   }
+    #   message("\nTraining interrupted at iteration ", i, ". Returning model trained so far.")
+    # }, error = function(ex) {
+    #   stop_reason <<- "error"
+    #   if (display_progress) {
+    #     pb$terminate()
+    #   }
+    #   message("\nError occurred at iteration ", i, ". Returning model trained so far.")
+    # })
   })
 
 
@@ -506,18 +474,9 @@ shrinkGPR <- function(formula,
       terms = mt,
       xlevels = .getXlevels(mt, mf),
       data = data,
-      d_cov = x$shape[2]
+      d_cov = x$shape[2],
+      M = y$shape[2]
     )
-
-    if (!is.null(x_mean)) {
-      model_internals$terms_mean <- mt_mean
-      model_internals$xlevels_mean <- .getXlevels(mt_mean, mf_mean)
-      model_internals$x_mean <- TRUE
-      model_internals$d_mean <- x_mean$shape[2]
-      model_internals$x_mean_names <- x_mean_colnames
-    } else {
-      model_internals$x_mean <- FALSE
-    }
   } else {
     model_internals <- cont_model$model_internals
   }
@@ -531,7 +490,7 @@ shrinkGPR <- function(formula,
               optimizer = optimizer,
               model_internals = model_internals)
 
-  attr(res, "class") <- "shrinkGPR"
+  attr(res, "class") <- c("shrinkMVGPR", "shrinkMVTPR")
   attr(res, "device") <- device
 
   return(res)

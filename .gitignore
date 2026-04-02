@@ -2,3 +2,5 @@
 .Rhistory
 .RData
 .Ruserdata
+Rplots.pdf
+tests/testthat/Rplots.pdf

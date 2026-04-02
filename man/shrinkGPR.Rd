@@ -82,22 +82,44 @@ A list object of class \code{shrinkGPR}, containing:
 \item{\code{model_internals}}{Internal objects required for predictions and further training, such as model matrices and formulas.}
 }
 \description{
-\code{shrinkGPR} implements Gaussian process regression (GPR) with a hierarchical shrinkage prior for hyperparameter estimation,
-incorporating normalizing flows to approximate the posterior distribution. The function facilitates model specification, optimization,
-and training, including support for early stopping, user-defined kernels, and flow-based transformations.
+Fits a Gaussian process regression (GPR) model to an \eqn{N \times 1} response vector \eqn{Y}.
+The joint distribution is multivariate normal \eqn{Y \sim \mathcal{N}(0,\, K + \sigma^2 I)}, where \eqn{K} is the GP kernel matrix
+with triple-gamma shrinkage priors on the inverse length-scales. Covariates whose length-scales are shrunk to zero have no influence on the
+covariance structure. An optional linear mean \eqn{x_\mu^\top \beta} can be added via \code{formula_mean}.
+The joint posterior is approximated by normalizing flows trained to maximize the ELBO.
 }
 \details{
-This implementation provides a computationally efficient framework for GPR, enabling flexible modeling of mean and covariance structures.
-Users can specify custom kernel functions, flow transformations, and hyperparameter configurations to adapt the model to their data.
+\strong{Model Specification}
 
-The \code{shrinkGPR} function combines Gaussian process regression with shrinkage priors and normalizing flows for efficient
-and flexible hyperparameter estimation. It supports custom kernels, hierarchical shrinkage priors for mean and covariance structures,
-and flow-based posterior approximations. The \code{auto_stop} option allows early stopping based on lack of improvement in ELBO.
+Given \eqn{N} observations with \eqn{d}-dimensional covariates \eqn{x_i}, the model is
+\deqn{y_i = f(x_i) + \varepsilon_i, \quad \varepsilon_i \overset{iid}{\sim} \mathcal{N}(0, \sigma^2),}
+\deqn{f \sim \mathcal{GP}(\mu(\cdot),\; k(\cdot, \cdot\,;\, \theta, \tau)).}
+The default squared exponential kernel is
+\deqn{k(x, x';\, \theta, \tau) = \frac{1}{\tau} \exp\!\left(-\frac{1}{2} \sum_{j=1}^d \theta_j (x_j - x'_j)^2\right),}
+where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{\tau > 0} is the output scale.
+Users can specify custom kernels by following the guidelines below, or use one of the other provided kernel functions in \code{\link{kernel_functions}}.
+If \code{formula_mean} is provided, the GP mean becomes \eqn{x_{\mu,i}^\top \beta} instead of zero.
+
+\strong{Priors}
+
+The triple-gamma (TG) prior (Cadonna et al. 2020) induces sparsity on inactive length-scales:
+\deqn{\theta_j \mid \tau \sim \mathrm{TG}(a, c, \tau), \quad j = 1, \ldots, d,}
+\deqn{\tau \sim F(2c, 2a),}
+\deqn{\sigma^2 \sim \mathrm{Exp}(\sigma^2_\mathrm{rate}).}
+With a mean structure, the regression coefficients receive a normal-gamma-gamma (NGG) prior:
+\deqn{\beta_k \mid \tau_\mu \sim \mathrm{NGG}(a_\mu, c_\mu, \tau_\mu), \quad \tau_\mu \sim F(2c_\mu, 2a_\mu).}
+Parameters \eqn{a} and \eqn{c} jointly control the spike at zero (\eqn{a}) and the tail decay (\eqn{c}) of the prior.
+
+\strong{Inference}
+
+The posterior is approximated by a normalizing flow \eqn{q_\phi} trained to maximize the ELBO. The default flow is a
+Sylvester flow (van den Berg et al. 2018), but users can specify custom flows by following the guidelines below.
+\code{auto_stop} triggers early stopping when the ELBO shows no significant improvement over the last 100 iterations.
 
 \strong{Custom Kernel Functions}
 
-Users can define custom kernel functions for the covariance structure of the Gaussian process by passing them to the \code{kernel_func} argument.
-A valid kernel function must follow the same structure as the provided \code{kernel_se} (squared exponential kernel). The function should:
+Users can define custom kernel functions by passing them to the \code{kernel_func} argument.
+A valid kernel function must follow the same structure as \code{\link{kernel_se}}. The function should:
 
 \enumerate{
 \item \strong{Accept the following arguments:}
@@ -111,79 +133,28 @@ Otherwise, it computes the kernel between \code{x} and \code{x_star}.
 
 \item \strong{Return:}
 \itemize{
-\item If \code{x_star = NULL}, the function must return a \code{torch_tensor} of dimensions \code{n_latent x N x N}, representing pairwise covariances
-between all points in \code{x}.
-\item If \code{x_star} is provided, the function must return a \code{torch_tensor} of dimensions \code{n_latent x N_new x N},
-representing pairwise covariances between \code{x_star} and \code{x}.
+\item If \code{x_star = NULL}: a \code{torch_tensor} of dimensions \code{n_latent x N x N}.
+\item If \code{x_star} is provided: a \code{torch_tensor} of dimensions \code{n_latent x N_new x N}.
 }
 
 \item \strong{Requirements:}
 \itemize{
-\item The kernel must compute a valid positive semi-definite covariance matrix.
-\item It should use efficient tensor operations from the Torch library (e.g., \code{torch_bmm}, \code{torch_sum}) to ensure compatibility with GPUs or CPUs.
+\item The kernel must produce a valid positive semi-definite covariance matrix.
+\item Use \code{torch} tensor operations to ensure GPU/CPU compatibility.
 }
 }
 
-\strong{Testing a Custom Kernel Function}
-
-To test a custom kernel function:
-\enumerate{
-\item \strong{Verify Dimensions:}
-\itemize{
-\item When \code{x_star = NULL}, ensure the output is \code{n_latent x N x N}.
-\item When \code{x_star} is provided, ensure the output is \code{n_latent x N_new x N}.
-}
-\item \strong{Check Positive Semi-Definiteness:}
-Validate that the kernel produces a positive semi-definite covariance matrix for valid inputs.
-\item \strong{Integrate:}
-Use the custom kernel with \code{shrinkGPR} to confirm its compatibility.
-}
-
-Examples of kernel functions can be found in the \code{kernel_funcs.R} file in the package source code,
-which are documented in the \code{\link{kernel_functions}} help file.
+See \code{\link{kernel_functions}} for documented examples.
 
 \strong{Custom Flow Functions}
 
-Users can define custom flow functions for use in Gaussian process regression models by following the structure
-and conventions of the provided \code{sylvester} function. A valid flow function should be implemented as a
-\code{nn_module} in \code{torch} and must meet the following requirements:
-
-\strong{Structure of a Custom Flow Function}
-
-\enumerate{
-\item \strong{Initialization (\code{initialize})}:
+Users can define custom flow functions by implementing an \code{nn_module} in \code{torch}.
+The module must have a \code{forward} method that accepts a tensor \code{z} of shape \code{n_latent x D} and returns a list with:
 \itemize{
-\item Include all required parameters as \code{nn_parameter} or \code{nn_buffer}, and initialize them appropriately.
-\item Parameters may include matrices for transformations (e.g., triangular matrices), biases, or other learnable components.
+\item \code{zk}: the transformed samples, shape \code{n_latent x D}.
+\item \code{log_diag_j}: the log-absolute-determinant of the Jacobian, shape \code{n_latent}.
 }
-
-\item \strong{Forward Pass (\code{forward})}:
-\itemize{
-\item The \code{forward} method should accept an input tensor \code{z} of dimensions \code{n_latent x D}.
-\item The method must:
-\itemize{
-\item Compute the transformed tensor \code{z}.
-\item Compute the log determinant of the Jacobian (\code{log|det J|}).
-}
-\item The method should return a list containing:
-\itemize{
-\item \code{zk}: The transformed samples after applying the flow (\code{n_latent x D}).
-\item \code{log_diag_j}: A tensor of size \code{n_latent} containing the log determinant of the Jacobian for each sample.
-}
-}
-
-\item \strong{Output Dimensions}:
-\itemize{
-\item Input tensor \code{z}: \code{n_latent x D}.
-\item Outputs:
-\itemize{
-\item \code{zk}: \code{n_latent x D}.
-\item \code{log_diag_j}: \code{n_latent}.
-}
-}
-}
-An example of a flow function can be found in the \code{sylvester.R} file in the package source code,
-which is documented in the \code{\link{sylvester}} help file.
+See \code{\link{sylvester}} for a documented example.
 }
 \examples{
 \donttest{

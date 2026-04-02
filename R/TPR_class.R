@@ -1,6 +1,7 @@
 # Create nn_module subclass that implements forward methods for TPR
 TPR_class <- nn_module(
   classname = "TPR",
+  inherit = GPR_class,
   initialize = function(y,
                         x,
                         x_mean,
@@ -65,25 +66,25 @@ TPR_class <- nn_module(
     self$model <- nn_sequential(self$layers)
 
     # Add data to the model
-    # Unsqueezing y to add a dimension - this enables broadcasting
-    self$y <- y$to(device = self$device)$unsqueeze(2)
-    self$x <- x$to(device = self$device)
+    self$y <- nn_buffer(y$unsqueeze(2)$to(device = self$device))
+    self$x <- nn_buffer(x$to(device = self$device))
     if (!self$mean_zero) {
-      self$x_mean <- x_mean$to(device = self$device)
+      self$x_mean <- nn_buffer(x_mean$to(device = self$device))
     } else {
       self$x_mean <- NULL
     }
 
-    #create holders for prior a, c, lam and rate
-    self$prior_a <- torch_tensor(a, device = self$device, requires_grad = FALSE)
-    self$prior_c <- torch_tensor(c, device = self$device, requires_grad = FALSE)
-    self$prior_a_mean <- torch_tensor(a_mean, device = self$device, requires_grad = FALSE)
-    self$prior_c_mean <- torch_tensor(c_mean, device = self$device, requires_grad = FALSE)
-    self$prior_rate <- torch_tensor(sigma2_rate, device = self$device, requires_grad = FALSE)
+    # create holders for prior a, c, tau and rate
+    self$prior_a <- nn_buffer(torch_tensor(a, device = self$device, requires_grad = FALSE))
+    self$prior_c <- nn_buffer(torch_tensor(c, device = self$device, requires_grad = FALSE))
+    self$prior_a_mean <- nn_buffer(torch_tensor(a_mean, device = self$device, requires_grad = FALSE))
+    self$prior_c_mean <- nn_buffer(torch_tensor(c_mean, device = self$device, requires_grad = FALSE))
+    self$prior_rate <- nn_buffer(torch_tensor(sigma2_rate, device = self$device, requires_grad = FALSE))
 
     # For prior on nu
-    self$nu_alpha <- torch_tensor(nu_alpha, device = self$device, requires_grad = FALSE)
-    self$nu_beta <- torch_tensor(nu_beta, device = self$device, requires_grad = FALSE)
+    self$nu_alpha <- nn_buffer(torch_tensor(nu_alpha, device = self$device, requires_grad = FALSE))
+    self$nu_beta <- nn_buffer(torch_tensor(nu_beta, device = self$device, requires_grad = FALSE))
+
   },
 
   # Unnormalised log likelihood for Student-t Process
@@ -97,36 +98,6 @@ TPR_class <- nn_module(
       beta = beta,
       nu = nu)
     return(log_lik)
-  },
-
-  # Unnormalised log density of triple gamma prior
-  ltg = function(x, a, c, lam) {
-    res <-  0.5 * torch_log(lam$unsqueeze(2)) -
-      0.5 * torch_log(x) +
-      log_hyperu(c + 0.5, 1.5 - a, a* x/(4.0 * c) * lam$unsqueeze(2))
-
-    return(res)
-  },
-
-  # Unnormalised log density of normal-gamma-gamma prior
-  ngg = function(x, a, c, lam) {
-    res <- 0.5 * torch_log(lam$unsqueeze(2)) +
-      log_hyperu(c + 0.5, 1.5 - a,  a * x^2/(4.0 * c) * lam$unsqueeze(2))
-
-    return(res)
-  },
-
-  # Unnormalised log density of exponential distribution
-  lexp = function(x, rate) {
-    return(torch_log(rate) - rate * x)
-  },
-
-  # Unnormalised log density of F distribution
-  ldf = function(x, d1, d2) {
-    res <- (d1 * 0.5 - 1.0) * torch_log(x) - (d1 + d2) * 0.5 *
-      torch_log1p(d1 / d2 * x)
-
-    return(res)
   },
 
   # Unnormalised log density of gamma distribution
@@ -154,7 +125,7 @@ TPR_class <- nn_module(
       l2_sigma_lam <- self$softplus(zk[, 1:(self$x$shape[2] + 2)])
 
       log_det_J <- log_det_J + self$beta_sp * (zk[, -2] - self$softplus(zk[, -2]))
-      lam_mean <- self$softplus(zk[, -2])
+      tau_mean <- self$softplus(zk[, -2])
 
       # For nu
       log_det_J <- log_det_J + self$beta_sp * (zk[, -1] - self$softplus(zk[, -1]))
@@ -162,7 +133,7 @@ TPR_class <- nn_module(
 
       zk <- torch_cat(list(l2_sigma_lam,
                            zk[, (self$x$shape[2] + 3):(self$x$shape[2] + self$x_mean$shape[2] + 2)],
-                           lam_mean$unsqueeze(2),
+                           tau_mean$unsqueeze(2),
                            nu$unsqueeze(2)),
                       dim = 2)
     }
@@ -170,58 +141,29 @@ TPR_class <- nn_module(
     return(list(zk = zk, log_det_J = log_det_J))
   },
 
-  # Function to generate data from t distribution
-  rt_torch = function(..., nu, device = "cpu", dtype = torch_float()) {
-    sample_shape <- c(...)
-
-    nu_t <- torch_scalar_tensor(nu, device = device, dtype = dtype)  # scalar
-    z <- torch_randn(!!!sample_shape, device = device, dtype = dtype)
-
-    g <- distr_gamma(
-      concentration = nu_t / 2,
-      rate = torch_scalar_tensor(0.5, device = device, dtype = dtype) # scalar
-    )
-    u <- g$sample(sample_shape = sample_shape)
-
-    # drop trailing singleton if present
-    if (u$ndim == z$ndim + 1 && u$size(u$ndim) == 1) {
-      u <- u$squeeze(-1)
-    }
-
-    z / torch_sqrt(u / nu_t)
-  },
-
-  gen_batch = function(n_latent) {
-    # Generate a batch of samples from the model
-    # z <- torch_randn(n_latent, self$d, device = self$device)
-    z <- self$rt_torch(n_latent, self$d, nu = 2.1, device = self$device)
-    return(z)
-  },
-
-
   elbo = function(zk_pos, log_det_J) {
     # Extract the components of the variational distribution
     # Convention:
     # First x$shape[2] components are the theta parameters
     # Next component is the sigma parameter
-    # Next component is the lambda parameter
+    # Next component is the tau parameter
     # Next x_mean$shape[2] components are the mean parameters
-    # Next component is the lambda parameter for the mean
+    # Next component is the tau parameter for the mean
     # Last component is the nu parameter (degrees of freedom for t dist)
     l2_zk <- zk_pos[, 1:self$x$shape[2]]
     sigma_zk <- zk_pos[, (self$x$shape[2] + 1)]
-    lam_zk <- zk_pos[, (self$x$shape[2] + 2)]
+    tau_zk <- zk_pos[, (self$x$shape[2] + 2)]
     nu_zk <- zk_pos[, -1] + 2 # +2 to ensure nu > 2
 
     if (!self$mean_zero) {
       beta <- zk_pos[, (self$x$shape[2] + 3):(self$x$shape[2] + 2 + self$x_mean$shape[2])]
-      lam_mean <- zk_pos[, -2]
+      tau_mean <- zk_pos[, -2]
     } else {
       beta <- NULL
     }
 
     # Calculate covariance matrix
-    K <- self$kernel_func(l2_zk, lam_zk, self$x)
+    K <- self$kernel_func(l2_zk, tau_zk, self$x)
 
 
     # Calculate the components of the ELBO
@@ -237,14 +179,14 @@ TPR_class <- nn_module(
       likelihood <<- self$ldt(K, L, sigma_zk, beta, nu_zk)$mean()
     })
 
-    prior <- self$ltg(l2_zk, self$prior_a, self$prior_c, lam_zk)$sum(dim = 2)$mean() +
-      self$ldf(lam_zk/2, 2*self$prior_a, 2*self$prior_c)$mean() +
+    prior <- self$ltg(l2_zk, self$prior_a, self$prior_c, tau_zk)$sum(dim = 2)$mean() +
+      self$ldf(tau_zk/2, 2*self$prior_a, 2*self$prior_c)$mean() +
       self$lexp(sigma_zk, self$prior_rate)$mean() +
       self$ldg(nu_zk - 2, self$nu_alpha, self$nu_beta)$mean()
 
     if (!self$mean_zero) {
-      prior <- prior + self$ngg(beta, self$prior_a_mean, self$prior_c_mean, lam_zk)$sum(dim = 2)$mean() +
-        self$ldf(lam_mean/2, 2*self$prior_a_mean, 2*self$prior_c_mean)$mean()
+      prior <- prior + self$ngg(beta, self$prior_a_mean, self$prior_c_mean, tau_zk)$sum(dim = 2)$mean() +
+        self$ldf(tau_mean/2, 2*self$prior_a_mean, 2*self$prior_c_mean)$mean()
     }
 
     var_dens <- log_det_J$mean()
@@ -272,7 +214,7 @@ TPR_class <- nn_module(
 
       l2_zk <- zk_pos[, 1:self$x$shape[2]]
       sigma_zk <- zk_pos[, (self$x$shape[2] + 1)]
-      lam_zk <- zk_pos[, (self$x$shape[2] + 2)]
+      tau_zk <- zk_pos[, (self$x$shape[2] + 2)]
       nu_zk <- zk_pos[, -1] + 2 # +2 to ensure nu > 2
 
       if (!self$mean_zero) {
@@ -285,7 +227,7 @@ TPR_class <- nn_module(
       # L is the cholseky decomposition of K + sigma^2I, i.e. the covariance matrix of the GP
       # alpha is the solution to L L^T alpha = y, i.e. (K + sigma^2I)^{-1}y
 
-      K <- self$kernel_func(l2_zk, lam_zk, self$x)
+      K <- self$kernel_func(l2_zk, tau_zk, self$x)
       single_eye <- torch_eye(self$N, device = self$device)
       batch_sigma2 <- single_eye$`repeat`(c(nsamp, 1, 1)) *
         sigma_zk$unsqueeze(2)$unsqueeze(2)
@@ -303,10 +245,10 @@ TPR_class <- nn_module(
       single_eye <- torch_eye(N_new, device = self$device)
       batch_sigma2 <- single_eye$`repeat`(c(nsamp, 1, 1)) *
         sigma_zk$unsqueeze(2)$unsqueeze(2)
-      K_star_star <- self$kernel_func(l2_zk, lam_zk, x_new) + batch_sigma2
+      K_star_star <- self$kernel_func(l2_zk, tau_zk, x_new) + batch_sigma2
 
       # Calculate K_star, the covariance between the training and test data
-      K_star_t <- self$kernel_func(l2_zk, lam_zk, self$x, x_new)
+      K_star_t <- self$kernel_func(l2_zk, tau_zk, self$x, x_new)
 
       # Calculate the predictive mean and scale
       if (self$mean_zero) {

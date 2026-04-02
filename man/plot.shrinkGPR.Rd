@@ -25,20 +25,22 @@ Called for its side effects. Returns \code{invisible(NULL)}.
 }
 \examples{
 \donttest{
-# Simulate and fit a shrinkGPR model, then plot:
-sim <- simGPR()
-mod <- shrinkGPR(y ~ ., data = sim$data)
-plot(mod)
+if (torch::torch_is_installed()) {
+ # Simulate and fit a shrinkGPR model, then plot:
+ sim <- simGPR()
+ mod <- shrinkGPR(y ~ ., data = sim$data)
+ plot(mod)
 
-## Change axis label orientation
-plot(mod, las = 1)
+ ## Change axis label orientation
+ plot(mod, las = 1)
+ }
 }
-
 }
 \seealso{
 Other plotting functions: 
 \code{\link{plot.shrinkGPR_marg_samples_1D}()},
 \code{\link{plot.shrinkGPR_marg_samples_2D}()},
+\code{\link{plot.shrinkMVGPR}()},
 \code{\link{plot.shrinkTPR}()}
 }
 \author{

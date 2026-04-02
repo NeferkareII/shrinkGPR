@@ -15,7 +15,7 @@ gen_marginal_samples(
 )
 }
 \arguments{
-\item{mod}{A \code{shrinkGPR} or \code{shrinkTPR} object representing the fitted Gaussian/t process regression model.}
+\item{mod}{A \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR} or \code{shrinkMVTPR} object representing the fitted Gaussian/t process regression model.}
 
 \item{to_eval}{A character vector specifying the names of the covariates to evaluate. Can be one or two variables.}
 
@@ -70,11 +70,11 @@ if (torch::torch_is_installed()) {
   # Fit GPR model
   res <- shrinkGPR(y ~ x1 + x2, data = data)
 
-  # Generate posterior samples
-  samps <- gen_posterior_samples(res, nsamp = 1000)
+  # Generate marginal samples for x1
+  marginal_samps <- gen_marginal_samples(res, to_eval = "x1", nsamp = 100)
 
-  # Plot the posterior samples
-  boxplot(samps$thetas)
+  # Plot marginal predictions
+  plot(marginal_samps)
   }
 }
 }

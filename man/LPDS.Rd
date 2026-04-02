@@ -7,7 +7,7 @@
 LPDS(mod, data_test, nsamp = 100)
 }
 \arguments{
-\item{mod}{A \code{shrinkGPR} object representing the fitted Gaussian process regression model.}
+\item{mod}{A \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR} object representing the fitted model.}
 
 \item{data_test}{Data frame with one row containing the covariates for the test set.
 Variables in \code{data_test} must match those used in model fitting.}
@@ -18,11 +18,12 @@ Variables in \code{data_test} must match those used in model fitting.}
 A numeric value representing the log predictive density score for the test dataset.
 }
 \description{
-\code{LPDS} calculates the log predictive density score for a fitted \code{shrinkGPR} model using a test dataset.
+\code{LPDS} calculates the log predictive density score for a fitted \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR}, or \code{shrinkMVTPR}
+model using a test dataset.
 }
 \details{
 The log predictive density score is a measure of model fit that evaluates how well the model predicts unseen data.
-It is computed as the log of the marginal predictive density of the observed responses.
+It is computed as the log of the marginal predictive density at the true observed responses.
 }
 \examples{
 \donttest{

@@ -12,16 +12,16 @@
 #' @return Called for its side effects. Returns \code{invisible(NULL)}.
 #' @examples
 #' \donttest{
-# 'if (torch::torch_is_installed()) {
-#' # Simulate and fit a shrinkGPR model, then plot:
-#' sim <- simGPR()
-#' mod <- shrinkGPR(y ~ ., data = sim$data)
-#' plot(mod)
+#' if (torch::torch_is_installed()) {
+#'  # Simulate and fit a shrinkGPR model, then plot:
+#'  sim <- simGPR()
+#'  mod <- shrinkGPR(y ~ ., data = sim$data)
+#'  plot(mod)
 #'
-#' ## Change axis label orientation
-#' plot(mod, las = 1)
+#'  ## Change axis label orientation
+#'  plot(mod, las = 1)
+#'  }
 #' }
-#'
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
 #' @family plotting functions
 #' @export
@@ -56,20 +56,52 @@ plot.shrinkGPR <- function(x, nsamp = 1000, ...) {
 #' @return Called for its side effects. Returns \code{invisible(NULL)}.
 #' @examples
 #' \donttest{
-#'if (torch::torch_is_installed()) {
-#' # Simulate and fit a shrinkTPR model, then plot:
-#' sim <- simGPR()
-#' mod <- shrinkTPR(y ~ ., data = sim$data)
+#'  if (torch::torch_is_installed()) {
+#'  # Simulate and fit a shrinkTPR model, then plot:
+#'  sim <- simGPR()
+#'  mod <- shrinkTPR(y ~ ., data = sim$data)
+#'  plot(mod)
+#'
+#'  ## Change axis label orientation
+#'  plot(mod, las = 1)
+#'  }
+#' }
+#' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
+#' @family plotting functions
+#' @export
+plot.shrinkTPR <- function(x, nsamp = 1000, ...) {
+  plot.shrinkGPR(x, nsamp = nsamp, ...)
+}
+
+#' Graphical summary of posterior of theta
+#'
+#' \code{plot.shrinkMVGPR} generates a boxplot visualizing the posterior distribution of
+#' \code{theta} obtained from a fitted \code{shrinkMVGPR} object.
+#'
+#' @param x a \code{shrinkMVGPR} object.
+#' @param nsamp a positive integer specifying the number of posterior samples to draw for plotting.
+#' The default is \code{1000}.
+#' @param ... further arguments passed to the internal \code{\link[graphics]{boxplot}} function,
+#' such as axis labeling or plotting options. By default, \code{las = 2} is used unless explicitly
+#' overridden by the user.
+#' @return Called for its side effects. Returns \code{invisible(NULL)}.
+#' @examples
+#' \donttest{
+#' if (torch::torch_is_installed()) {
+#' # Simulate and fit a shrinkMVGPR model, then plot:
+#' sim <- simMVGPR()
+#' mod <- shrinkMVGPR(cbind(y.1, y.2) ~ ., data = sim$data)
 #' plot(mod)
 #'
 #' ## Change axis label orientation
 #' plot(mod, las = 1)
 #' }
+#' }
 #'
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
 #' @family plotting functions
 #' @export
-plot.shrinkTPR <- function(x, nsamp = 1000, ...) {
+plot.shrinkMVGPR <- function(x, nsamp = 1000, ...) {
   plot.shrinkGPR(x, nsamp = nsamp, ...)
 }
 
@@ -118,6 +150,7 @@ plot.shrinkTPR <- function(x, nsamp = 1000, ...) {
 #' # Customize plot appearance (see plot.mcmc.tvp from shrinkTVP package for more options)
 #' plot(marginal_samps_x2, shaded = FALSE, quantlines = TRUE, quantcol = "red")
 #'}
+#'}
 #'
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
 #' @family plotting functions
@@ -127,8 +160,6 @@ plot.shrinkGPR_marg_samples_1D <- function(x, ...) {
   if (!requireNamespace("shrinkTVP", quietly = TRUE)) {
     stop("The 'shrinkTVP' package is required for this function. Please install it with install.packages('shrinkTVP').")
   }
-
-  plot_tmp <- getFromNamespace("plot.mcmc.tvp", "shrinkTVP")
 
 
   if (!inherits(x, "shrinkGPR_marg_samples_1D")) {
@@ -145,17 +176,38 @@ plot.shrinkGPR_marg_samples_1D <- function(x, ...) {
     args$ylab <- attr(x, "response")
   }
 
+  if (attr(x, "M") == 1) {
+    plot_tmp <- getFromNamespace("plot.mcmc.tvp", "shrinkTVP")
 
-  args$x <- x$mean_pred
-  attr(args$x, "index") <-  x$grid
-  do.call(plot_tmp, args)
+    args$x <- x$mean_pred
+    attr(args$x, "index") <-  x$grid
+    do.call(plot_tmp, args)
+  } else {
+    plot_tmp <- getFromNamespace("plot.shrinkTVP", "shrinkTVP")
+
+    list_resp <- list(response = lapply(1:attr(x, "M"), \(i) {
+      tmp <- x$mean_pred[,,i]
+      attr(tmp, "class") <- "mcmc.tvp"
+      attr(tmp, "index") <- x$grid
+      return(tmp)
+    }))
+
+    attr(list_resp$response, "type") <- "sample"
+
+    args$x <- list_resp
+    args$pars = "response"
+
+    do.call(plot_tmp, args)
+  }
+
+
 
   invisible(NULL)
 }
 
 
 
-#' Plot method for 2D marginal predictions from \code{shrinkGPR}
+#' Plot method for 2D marginal predictions
 #'
 #' @description
 #' Generates a 3D surface plot of 2D conditional predictive samples produced by \code{\link{gen_marginal_samples}}.
@@ -208,6 +260,7 @@ plot.shrinkGPR_marg_samples_1D <- function(x, ...) {
 #'     zaxis = list(title = "Expected value")
 #'   )
 #' )
+#'}
 #'}
 #'
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
