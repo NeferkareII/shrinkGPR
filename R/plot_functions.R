@@ -78,7 +78,7 @@ plot.shrinkTPR <- function(x, nsamp = 1000, ...) {
 #' \code{plot.shrinkMVGPR} generates a boxplot visualizing the posterior distribution of
 #' \code{theta} obtained from a fitted \code{shrinkMVGPR} object.
 #'
-#' @param x a \code{shrinkTPR} object.
+#' @param x a \code{shrinkMVGPR} object.
 #' @param nsamp a positive integer specifying the number of posterior samples to draw for plotting.
 #' The default is \code{1000}.
 #' @param ... further arguments passed to the internal \code{\link[graphics]{boxplot}} function,
@@ -90,7 +90,7 @@ plot.shrinkTPR <- function(x, nsamp = 1000, ...) {
 #' if (torch::torch_is_installed()) {
 #' # Simulate and fit a shrinkMVGPR model, then plot:
 #' sim <- simMVGPR()
-#' mod <- shrinkMVPR(cbind(y.1, y.2) ~ ., data = sim$data)
+#' mod <- shrinkMVGPR(cbind(y.1, y.2) ~ ., data = sim$data)
 #' plot(mod)
 #'
 #' ## Change axis label orientation
@@ -207,7 +207,7 @@ plot.shrinkGPR_marg_samples_1D <- function(x, ...) {
 
 
 
-#' Plot method for 2D marginal predictions from \code{shrinkGPR}
+#' Plot method for 2D marginal predictions
 #'
 #' @description
 #' Generates a 3D surface plot of 2D conditional predictive samples produced by \code{\link{gen_marginal_samples}}.

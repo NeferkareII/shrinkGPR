@@ -50,9 +50,9 @@ test_shrinkGPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
   # Test posterior samples
   posterior <- gen_posterior_samples(res, nsamp = 100)
   expect_type(posterior, "list")
-  names_posterior <- c("thetas", "sigma2", "lambda")
+  names_posterior <- c("thetas", "sigma2", "tau")
   if (res$model_internals$x_mean) {
-    names_posterior <- c(names_posterior, "betas", "lambda_mean")
+    names_posterior <- c(names_posterior, "betas", "tau_mean")
   }
   expect_named(posterior, names_posterior)
   expect_equal(nrow(posterior$thetas), 100)
@@ -91,7 +91,7 @@ test_shrinkGPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
 
 
   if (res$model_internals$x_mean) {
-    expect_true(all(c("betas", "lambda_mean") %in% names(posterior)))
+    expect_true(all(c("betas", "tau_mean") %in% names(posterior)))
   }
 
   # Test saving and loading
@@ -124,6 +124,7 @@ params <- c("display_progress", "auto_stop")
 for (i in seq_len(nrow(scenarios))) {
   for (j in params) {
     args <- formals(shrinkGPR)
+    args$cont_model <- NULL  # Ensure cont_model is NULL for initial test
     args <- args[sapply(args, function(x) !is.null(x))]
 
     args[[j]] <- !args[[j]]

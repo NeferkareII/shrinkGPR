@@ -9,7 +9,7 @@
 #' @param sigma2 Positive numeric value specifying the noise variance. Default is 0.1.
 #' @param tau Positive numeric value specifying the global shrinkage parameter. Default is 2.
 #' @param kernel_func Function specifying the covariance kernel. Default is \code{kernel_se}.
-#' @param perc_spars Numeric value in \[0, 1\] indicating the proportion of elements in \code{theta}. Default is 0.5.
+#' @param perc_spars Numeric value in \[0, 1\] indicating the proportion of inactive (zero) inverse length-scale parameters in \code{theta}. Default is 0.5.
 #' @param rho Numeric value in \[0, 1\] indicating the correlation between the covariates. Default is 0.
 #' @param theta \emph{Optional} numeric vector specifying the true inverse length-scale parameters.
 #' If not provided, they are randomly generated.
@@ -50,7 +50,7 @@
 #'   sim_data <- simMVGPR()
 #'
 #'   # Simulate data with custom settings
-#'   sim_data <- simGPR(N = 100, d = 5, perc_spars = 0.3, sigma2 = 0.5)
+#'   sim_data <- simMVGPR(N = 100, d = 5, perc_spars = 0.3, sigma2 = 0.5)
 #'
 #'   # Access the simulated data
 #'   head(sim_data$data)
@@ -112,8 +112,11 @@ simMVGPR <-  function(N = 200,
 
   # Check that Omega, if provided, is an SPD matrix of size M x M
   if (!missing(Omega)) {
-    if (!is.numeric(Omega) || !is_correlation_matrix(Omega)) {
-      stop("The argument 'Omega', if provided, must be a symmetric positive definite correlation matrix of size M x M.")
+    if (!is.numeric(Omega) || !is.matrix(Omega) || nrow(Omega) != M || ncol(Omega) != M) {
+      stop("The argument 'Omega', if provided, must be a numeric symmetric positive definite matrix of size M x M.")
+    }
+    if (!isSymmetric(Omega) || any(eigen(Omega, only.values = TRUE)$values <= 0)) {
+      stop("The argument 'Omega', if provided, must be a symmetric positive definite matrix.")
     }
   }
 

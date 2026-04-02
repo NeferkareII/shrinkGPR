@@ -7,7 +7,7 @@
 \method{predict}{shrinkMVGPR}(object, newdata, nsamp = 100, ...)
 }
 \arguments{
-\item{object}{A \code{shrinkMVGPR} object representing the fitted multivariate Gaussian process regression model.}
+\item{object}{A \code{shrinkMVGPR} or \code{shrinkMVTPR} object representing the fitted multivariate process regression model.}
 
 \item{newdata}{\emph{Optional} data frame containing the covariates for the prediction points. If missing, the training data is used.}
 
@@ -16,7 +16,8 @@
 \item{...}{Currently ignored.}
 }
 \value{
-A matrix containing posterior predictive samples for each covariate combination in \code{newdata}.
+A 3-dimensional array of dimensions \code{nsamp x N_new x M} containing posterior predictive samples
+for each covariate combination in \code{newdata}.
 }
 \description{
 \code{predict.shrinkMVGPR} generates posterior predictive samples from a fitted \code{shrinkMVGPR} model at specified covariates.
@@ -35,10 +36,10 @@ if (torch::torch_is_installed()) {
   y1 <- sin(2 * pi * x[, 1])
   y2 <- cos(2 * pi * x[, 2])
   y <- cbind(y1, y2) + matrix(rnorm(n * 2, sd = 0.1), n, 2)
-  data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
+  data <- data.frame(y1 = y1, y2 = y2, x1 = x[, 1], x2 = x[, 2])
 
   # Fit MVGPR model
-  res <- shrinkMVGPR(cbind(y.1, y.2) ~ x1 + x2, data = data)
+  res <- shrinkMVGPR(cbind(y1, y2) ~ x1 + x2, data = data)
   # Example usage for in-sample prediction
   preds <- predict(res)
 

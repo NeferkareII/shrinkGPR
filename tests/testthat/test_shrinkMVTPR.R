@@ -1,4 +1,4 @@
-test_shrinkTPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
+test_shrinkGPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
 
   if (!torch::torch_is_installed()) {
     skip("Torch is not installed. Skipping test.")
@@ -9,26 +9,27 @@ test_shrinkTPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
 
   # Create mock data
   full_dat <- data.frame(
-    y = sin(2 * pi * runif(20)) + rnorm(20, sd = 0.1),
+    y1 = sin(2 * pi * runif(20)) + rnorm(20, sd = 0.1),
+    y2 = cos(2 * pi * runif(20)) + rnorm(20, sd = 0.1),
     x1 = runif(20),
     x2 = rnorm(20)
   )
   train <- full_dat[1:15, ]
   test <- full_dat[16:20, ]
   args$data <- train
-  args$formula <- y ~ x1 + x2
+  args$formula <- cbind(y1, y2) ~ x1 + x2
 
   # Fit model
-  res <- do.call(shrinkTPR, args)
+  res <- do.call(shrinkMVTPR, args)
 
   # Test model object
-  expect_s3_class(res, "shrinkTPR")
-  expect_true("shrinkTPR" %in% class(res))
+  expect_s3_class(res, "shrinkMVTPR")
+  expect_true("shrinkMVTPR" %in% class(res))
 
   # Test prediction methods
   preds <- predict(res, newdata = test)
   expect_type(preds, "double")
-  expect_equal(dim(preds), c(100, nrow(test)))  # Default nsamp for prediction functions
+  expect_equal(dim(preds), c(100, nrow(test), 2))  # Default nsamp for prediction functions
 
   # Test LPDS
   lpds <- LPDS(res, data_test = test[1, ])
@@ -36,32 +37,33 @@ test_shrinkTPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
   expect_length(lpds, 1)
 
   # Test predictive density evaluation
+  eval_points <- cbind(eval_points, eval_points)  # For 2D outputs
   pred_dens <- eval_pred_dens(eval_points, res, data_test = test[1, ], log = log_pred)
   expect_type(pred_dens, "double")
-  expect_length(pred_dens, length(eval_points))
+  expect_length(pred_dens, nrow(eval_points))
 
   # Test predictive moments
   moments <- calc_pred_moments(res, newdata = test, nsamp = 100)
   expect_type(moments, "list")
-  expect_named(moments, c("means", "vars", "nu"))
-  expect_equal(dim(moments$means), c(100, nrow(test)))
-  expect_equal(dim(moments$vars), c(100, nrow(test), nrow(test)))
+  expect_named(moments, c("means", "K", "Omega", "nu"))
+  expect_equal(dim(moments$means), c(100, nrow(test), 2))
+  expect_equal(dim(moments$K), c(100, nrow(test), nrow(test)))
+  expect_equal(dim(moments$Omega), c(100, 2, 2))
 
   # Test posterior samples
   posterior <- gen_posterior_samples(res, nsamp = 100)
   expect_type(posterior, "list")
-  names_posterior <- c("thetas", "sigma2", "tau", "nu")
-  if (res$model_internals$x_mean) {
-    names_posterior <- c(names_posterior[1:3], "betas", "tau_mean", names_posterior[4])
-  }
+  names_posterior <- c("thetas", "tau", "sigma2", "tau_Om", "Omega", "nu")
   expect_named(posterior, names_posterior)
   expect_equal(nrow(posterior$thetas), 100)
+  expect_equal(dim(posterior$Omega), c(100, 2, 2))
+
 
   # Test marginal generation (1D)
   marg1 <- gen_marginal_samples(res, to_eval = "x1", nsamp = 10, n_eval_points = 10)
   expect_type(marg1, "list")
   expect_true(all(c("mean_pred", "grid") %in% names(marg1)))
-  expect_equal(dim(marg1$mean_pred), c(10, 10))
+  expect_equal(dim(marg1$mean_pred), c(10, 10, 2))
   expect_length(marg1$grid, 10)
   expect_s3_class(marg1, "shrinkGPR_marg_samples_1D")
 
@@ -69,7 +71,7 @@ test_shrinkTPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
   marg2 <- gen_marginal_samples(res, to_eval = c("x1", "x2"), nsamp = 5, n_eval_points = 5)
   expect_type(marg2, "list")
   expect_true(all(c("mean_pred", "grid") %in% names(marg2)))
-  expect_equal(dim(marg2$mean_pred), c(5, 5, 5))
+  expect_equal(dim(marg2$mean_pred), c(5, 5, 5, 2))
   expect_type(marg2$grid, "list")
   expect_length(marg2$grid, 2)
   expect_s3_class(marg2, "shrinkGPR_marg_samples_2D")
@@ -89,21 +91,17 @@ test_shrinkTPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
     expect_error(plot(marg2), "The 'plotly' package is required")
   }
 
-  if (res$model_internals$x_mean) {
-    expect_true(all(c("betas", "tau_mean") %in% names(posterior)))
-  }
-
   # Test saving and loading
   save_shrinkGPR(res, file = "test_shrinkGPR.pt")
   res2 <- load_shrinkGPR("test_shrinkGPR.pt")
 
   # Test that loaded model can be used for further training
   args$cont_model <- res2
-  res3 <- do.call(shrinkTPR, args)
+  res3 <- do.call(shrinkMVTPR, args)
 
-  # Check that res3 is a shrinkTPR object and has the expected structure
-  expect_s3_class(res3, "shrinkTPR")
-  expect_true("shrinkTPR" %in% class(res3))
+  # Check that res3 is a shrinkMVTPR object and has the expected structure
+  expect_s3_class(res3, "shrinkMVTPR")
+  expect_true("shrinkMVTPR" %in% class(res3))
 
   # Clean up saved file
   file.remove("test_shrinkGPR.pt")
@@ -122,7 +120,7 @@ params <- c("display_progress", "auto_stop")
 
 for (i in seq_len(nrow(scenarios))) {
   for (j in params) {
-    args <- formals(shrinkGPR)
+    args <- formals(shrinkMVTPR)
     args$cont_model <- NULL  # Ensure cont_model is NULL for initial test
     args <- args[sapply(args, function(x) !is.null(x))]
 
@@ -137,11 +135,7 @@ for (i in seq_len(nrow(scenarios))) {
       ", auto_stop: ", scenarios$auto_stop[i],
       ", toggled: ", j
     ), {
-      test_shrinkTPR(args)
-
-      # Test also with mean equation
-      args$formula_mean <- as.formula(~ x1 + x2)
-      test_shrinkTPR(args)
+      test_shrinkGPR(args)
     })
   }
 }

@@ -1,23 +1,27 @@
-#' Gaussian Process Regression with Shrinkage and Normalizing Flows
+#' Multivariate Student-t Process Regression with Shrinkage and Normalizing Flows
 #'
-#' \code{shrinkGPR} implements Gaussian process regression (GPR) with a hierarchical shrinkage prior for hyperparameter estimation,
-#' incorporating normalizing flows to approximate the posterior distribution. The function facilitates model specification, optimization,
-#' and training, including support for early stopping, user-defined kernels, and flow-based transformations.
-#'
-#' This implementation provides a computationally efficient framework for GPR, enabling flexible modeling of mean and covariance structures.
-#' Users can specify custom kernel functions, flow transformations, and hyperparameter configurations to adapt the model to their data.
+#' Fits a multivariate Student-t process regression (MVTPR) model to an \eqn{N \times M} response matrix \eqn{Y}. The joint
+#' distribution is matrix-variate Student-t, \eqn{Y \sim \mathcal{MT}(\nu,\, 0,\, K + \sigma^2 I,\, \Omega)}, where \eqn{K} is
+#' the GP kernel matrix with triple-gamma shrinkage priors on the inverse length-scales, \eqn{\Omega} is the \eqn{M \times M}
+#' output covariance, and \eqn{\nu} is the degrees of freedom parameter. Compared to \code{\link{shrinkMVGPR}}, the heavier tails
+#' provide greater robustness to outliers. The joint posterior is approximated by normalizing flows trained to maximize the ELBO.
 #'
 #' @param formula object of class "formula": a symbolic representation of the model for the covariance equation, as in \code{\link{lm}}.
-#' The response variable and covariates are specified here.
+#' The response variable and covariates are specified here. Specifically, the response is created by binding the \eqn{M} response variables together with 
+#' \code{cbind()} on the left-hand side of the formula, e.g., \code{cbind(y1, y2) ~ x}.
 #' @param data \emph{optional} data frame containing the response variable and the covariates. If not found in \code{data},
 #' the variables are taken from \code{environment(formula)}. No \code{NA}s are allowed in the response variable or covariates.
 #' @param a positive real number controlling the behavior at the origin of the shrinkage prior for the covariance structure. The default is 0.5.
 #' @param c positive real number controlling the tail behavior of the shrinkage prior for the covariance structure. The default is 0.5.
-#' @param formula_mean \emph{optional} formula for the linear mean equation. If provided, the covariates for the mean structure
-#' are specified separately from the covariance structure. A response variable is not required in this formula.
-#' @param a_mean positive real number controlling the behavior at the origin of the shrinkage for the mean structure. The default is 0.5.
-#' @param c_mean positive real number controlling the tail behavior of the shrinkage prior for the mean structure. The default is 0.5.
+#' @param eta positive real number controlling the concentration of the LKJ prior on the correlation matrix of the output covariance.
+#' Higher values push the prior towards the identity matrix. The default is 4.
+#' @param a_Om positive real number controlling the behavior at the origin of the shrinkage prior for the output covariance scale parameters. The default is 0.5.
+#' @param c_Om positive real number controlling the tail behavior of the shrinkage prior for the output covariance scale parameters. The default is 0.5.
 #' @param sigma2_rate positive real number controlling the prior rate parameter for the residual variance. The default is 10.
+#' @param nu_alpha positive real number controlling the shape parameter of the gamma prior for the degrees of freedom of the
+#' matrix-t process. The default is 0.5.
+#' @param nu_beta positive real number controlling the rate parameter of the shifted gamma prior for the degrees of freedom of the
+#' matrix-t process. The default is 2.
 #' @param kernel_func function specifying the covariance kernel. The default is \code{\link{kernel_se}}, a squared exponential kernel.
 #' For guidance on how to provide a custom kernel function, see Details.
 #' @param n_layers positive integer specifying the number of flow layers in the normalizing flow. The default is 10.
@@ -28,13 +32,13 @@
 #' For guidance on how to provide a custom flow function, see Details.
 #' @param n_epochs positive integer specifying the number of training epochs. The default is 1000.
 #' @param auto_stop logical value indicating whether to enable early stopping based on convergence. The default is \code{TRUE}.
-#' @param cont_model \emph{optional} object returned from a previous \code{shrinkGPR} call, enabling continuation of training from the saved state.
+#' @param cont_model \emph{optional} object returned from a previous \code{shrinkMVTPR} call, enabling continuation of training from the saved state.
 #' @param device \emph{optional} device to run the model on, e.g., \code{torch_device("cuda")} for GPU or \code{torch_device("cpu")} for CPU.
 #' Defaults to GPU if available; otherwise, CPU.
 #' @param display_progress logical value indicating whether to display progress bars and messages during training. The default is \code{TRUE}.
 #' @param optim_control \emph{optional} named list containing optimizer parameters. If not provided, default settings are used.
 #'
-#' @return A list object of class \code{shrinkGPR}, containing:
+#' @return A list object of classes \code{shrinkMVGPR} and \code{shrinkMVTPR}, containing:
 #' \item{\code{model}}{The best-performing trained model.}
 #' \item{\code{loss}}{The best loss value (ELBO) achieved during training.}
 #' \item{\code{loss_stor}}{A numeric vector storing the ELBO values at each training iteration.}
@@ -43,140 +47,87 @@
 #' \item{\code{model_internals}}{Internal objects required for predictions and further training, such as model matrices and formulas.}
 #'
 #' @details
-#' The \code{shrinkGPR} function combines Gaussian process regression with shrinkage priors and normalizing flows for efficient
-#' and flexible hyperparameter estimation. It supports custom kernels, hierarchical shrinkage priors for mean and covariance structures,
-#' and flow-based posterior approximations. The \code{auto_stop} option allows early stopping based on lack of improvement in ELBO.
+#' \strong{Model Specification}
+#'
+#' Given \eqn{N} observations with \eqn{d}-dimensional covariates and \eqn{M} response variables, the response matrix
+#' \eqn{Y \in \mathbb{R}^{N \times M}} follows a matrix-variate Student-t distribution:
+#' \deqn{Y \sim \mathcal{MT}_{N,M}(\nu,\; 0,\; K(\theta, \tau) + \sigma^2 I_N,\; \Omega),}
+#' which is equivalent to
+#' \deqn{\mathrm{vec}(Y) \sim t_{NM}\!\left(\nu,\; \mathbf{0},\; \Omega \otimes (K + \sigma^2 I_N)\right).}
+#' Here \eqn{K_{ij} = k(x_i, x_j;\, \theta, \tau)} is the kernel matrix and \eqn{\Omega} is the \eqn{M \times M}
+#' between-response covariance. The output covariance is parameterized as \eqn{\Omega = S D S}, where
+#' \eqn{D} is a correlation matrix and \eqn{S = \mathrm{diag}(s_1, \ldots, s_M)} contains the marginal standard deviations.
+#' The product of the diagonal elements of \eqn{S} is constrained to equal 1 to ensure identifiability.
+#' The default squared exponential kernel is
+#' \deqn{k(x, x';\, \theta, \tau) = \frac{1}{\tau} \exp\!\left(-\frac{1}{2} \sum_{j=1}^d \theta_j (x_j - x'_j)^2\right),}
+#' where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{\tau > 0} is the output scale. 
+#' Users can specify custom kernels by following the guidelines below, or use one of the other provided kernel functions in 
+#' \code{\link{kernel_functions}}.
+#' 
+#' \strong{Priors}
+#'
+#' \deqn{\theta_j \mid \tau \sim \mathrm{TG}(a, c, \tau), \quad j = 1, \ldots, d,}
+#' \deqn{\tau \sim F(2c, 2a),}
+#' \deqn{\sigma^2 \sim \mathrm{Exp}(\sigma^2_\mathrm{rate}),}
+#' \deqn{D \sim \mathrm{LKJ}(\eta),}
+#' \deqn{s_m \mid \tau_\Omega \sim \mathrm{TG}(a_\Omega, c_\Omega, \tau_\Omega), \quad m = 1, \ldots, M,}
+#' \deqn{\tau_\Omega \sim F(2c_\Omega, 2a_\Omega),}
+#' \deqn{\nu - 2 \sim \mathrm{Gamma}(\nu_\alpha, \nu_\beta).}
+#' The shift by 2 ensures \eqn{\nu > 2} so that the process covariance is finite.
+#'
+#' \strong{Inference}
+#'
+#' The posterior is approximated by a normalizing flow \eqn{q_\phi} trained to maximize the ELBO.
+#' \code{auto_stop} triggers early stopping when the ELBO shows no significant improvement over the last 100 iterations.
 #'
 #' \strong{Custom Kernel Functions}
 #'
-#' Users can define custom kernel functions for the covariance structure of the Gaussian process by passing them to the \code{kernel_func} argument.
-#' A valid kernel function must follow the same structure as the provided \code{kernel_se} (squared exponential kernel). The function should:
+#' Users can define custom kernel functions by passing them to the \code{kernel_func} argument.
+#' A valid kernel function must follow the same structure as \code{\link{kernel_se}}. The function must:
 #'
 #' \enumerate{
-#' \item \strong{Accept the following arguments:}
-#'   \itemize{
-#'     \item \code{thetas}: A \code{torch_tensor} of dimensions \code{n_latent x d}, representing latent length-scale parameters.
-#'     \item \code{tau}: A \code{torch_tensor} of length \code{n_latent}, representing latent scaling factors.
-#'     \item \code{x}: A \code{torch_tensor} of dimensions \code{N x d}, containing the input data points.
-#'     \item \code{x_star}: Either \code{NULL} or a \code{torch_tensor} of dimensions \code{N_new x d}. If \code{NULL}, the kernel is computed for \code{x} against itself.
-#'     Otherwise, it computes the kernel between \code{x} and \code{x_star}.
-#'   }
-#'
-#' \item \strong{Return:}
-#'   \itemize{
-#'     \item If \code{x_star = NULL}, the function must return a \code{torch_tensor} of dimensions \code{n_latent x N x N}, representing pairwise covariances
-#'     between all points in \code{x}.
-#'     \item If \code{x_star} is provided, the function must return a \code{torch_tensor} of dimensions \code{n_latent x N_new x N},
-#'     representing pairwise covariances between \code{x_star} and \code{x}.
-#'   }
-#'
-#' \item \strong{Requirements:}
-#'   \itemize{
-#'     \item The kernel must compute a valid positive semi-definite covariance matrix.
-#'     \item It should use efficient tensor operations from the Torch library (e.g., \code{torch_bmm}, \code{torch_sum}) to ensure compatibility with GPUs or CPUs.
-#'   }
+#'   \item Accept arguments \code{thetas} (\code{n_latent x d}), \code{tau} (length \code{n_latent}),
+#'     \code{x} (\code{N x d}), and optionally \code{x_star} (\code{N_new x d}).
+#'   \item Return a \code{torch_tensor} of dimensions \code{n_latent x N x N} (if \code{x_star = NULL})
+#'     or \code{n_latent x N_new x N} (if \code{x_star} is provided).
+#'   \item Produce a valid positive semi-definite covariance matrix using \code{torch} tensor operations.
 #' }
 #'
-#' \strong{Testing a Custom Kernel Function}
-#'
-#' To test a custom kernel function:
-#' \enumerate{
-#' \item \strong{Verify Dimensions:}
-#'   \itemize{
-#'     \item When \code{x_star = NULL}, ensure the output is \code{n_latent x N x N}.
-#'     \item When \code{x_star} is provided, ensure the output is \code{n_latent x N_new x N}.
-#'   }
-#' \item \strong{Check Positive Semi-Definiteness:}
-#'   Validate that the kernel produces a positive semi-definite covariance matrix for valid inputs.
-#' \item \strong{Integrate:}
-#'   Use the custom kernel with \code{shrinkGPR} to confirm its compatibility.
-#' }
-#'
-#' Examples of kernel functions can be found in the \code{kernel_funcs.R} file in the package source code,
-#' which are documented in the \code{\link{kernel_functions}} help file.
+#' See \code{\link{kernel_functions}} for documented examples.
 #'
 #' \strong{Custom Flow Functions}
 #'
-#' Users can define custom flow functions for use in Gaussian process regression models by following the structure
-#' and conventions of the provided \code{sylvester} function. A valid flow function should be implemented as a
-#' \code{nn_module} in \code{torch} and must meet the following requirements:
+#' Users can define custom flow functions by implementing an \code{nn_module} in \code{torch}.
+#' The module must have a \code{forward} method that accepts a tensor \code{z} of shape \code{n_latent x D}
+#' and returns a list with:
+#' \itemize{
+#'   \item \code{zk}: the transformed samples, shape \code{n_latent x D}.
+#'   \item \code{log_diag_j}: log-absolute-determinant of the Jacobian, shape \code{n_latent}.
+#' }
 #'
-#' \strong{Structure of a Custom Flow Function}
-#'
-#' \enumerate{
-#' \item \strong{Initialization (\code{initialize})}:
-#'   \itemize{
-#'     \item Include all required parameters as \code{nn_parameter} or \code{nn_buffer}, and initialize them appropriately.
-#'     \item Parameters may include matrices for transformations (e.g., triangular matrices), biases, or other learnable components.
-#'   }
-#'
-#' \item \strong{Forward Pass (\code{forward})}:
-#'   \itemize{
-#'     \item The \code{forward} method should accept an input tensor \code{z} of dimensions \code{n_latent x D}.
-#'     \item The method must:
-#'       \itemize{
-#'         \item Compute the transformed tensor \code{z}.
-#'         \item Compute the log determinant of the Jacobian (\code{log|det J|}).
-#'       }
-#'     \item The method should return a list containing:
-#'       \itemize{
-#'         \item \code{zk}: The transformed samples after applying the flow (\code{n_latent x D}).
-#'         \item \code{log_diag_j}: A tensor of size \code{n_latent} containing the log determinant of the Jacobian for each sample.
-#'       }
-#'   }
-#'
-#' \item \strong{Output Dimensions}:
-#'   \itemize{
-#'     \item Input tensor \code{z}: \code{n_latent x D}.
-#'     \item Outputs:
-#'       \itemize{
-#'         \item \code{zk}: \code{n_latent x D}.
-#'         \item \code{log_diag_j}: \code{n_latent}.
-#'       }
-#'   }
-#'}
-#' An example of a flow function can be found in the \code{sylvester.R} file in the package source code,
-#' which is documented in the \code{\link{sylvester}} help file.
+#' See \code{\link{sylvester}} for a documented example.
 #'
 #' @examples
 #' \donttest{
 #' if (torch::torch_is_installed()) {
-#'   # Simulate data
-#'   set.seed(123)
+#'   # Simulate multivariate data
 #'   torch::torch_manual_seed(123)
-#'   n <- 100
-#'   x <- matrix(runif(n * 2), n, 2)
-#'   y <- sin(2 * pi * x[, 1]) + rnorm(n, sd = 0.1)
-#'   data <- data.frame(y = y, x1 = x[, 1], x2 = x[, 2])
+#'   sim <- simMVGPR(N = 100, M = 2, d = 2)
 #'
-#'   # Fit GPR model
-#'   res <- shrinkGPR(y ~ x1 + x2, data = data)
+#'   # Fit MVTPR model
+#'   res <- shrinkMVTPR(cbind(y.1, y.2) ~ x.1 + x.2, data = sim$data)
 #'
 #'   # Check convergence
 #'   plot(res$loss_stor, type = "l", main = "Loss Over Iterations")
 #'
-#'   # Check posterior
+#'   # Check posterior of length-scale parameters
 #'   samps <- gen_posterior_samples(res, nsamp = 1000)
-#'   boxplot(samps$thetas) # Second theta is pulled towards zero
+#'   boxplot(samps$thetas)
 #'
-#'   # Predict
-#'   x1_new <- seq(from = 0, to = 1, length.out = 100)
-#'   x2_new <- runif(100)
-#'   y_new <- predict(res, newdata = data.frame(x1 = x1_new, x2 = x2_new), nsamp = 2000)
-#'
-#'   # Plot
-#'   quants <- apply(y_new, 2, quantile, c(0.025, 0.5, 0.975))
-#'   plot(x1_new, quants[2, ], type = "l", ylim = c(-1.5, 1.5),
-#'         xlab = "x1", ylab = "y", lwd = 2)
-#'   polygon(c(x1_new, rev(x1_new)), c(quants[1, ], rev(quants[3, ])),
-#'         col = adjustcolor("skyblue", alpha.f = 0.5), border = NA)
-#'   points(x[,1], y)
-#'   curve(sin(2 * pi * x), add = TRUE, col = "forestgreen", lwd = 2, lty = 2)
-#'
-#'
-#'
-#'   # Add mean equation
-#'   res2 <- shrinkGPR(y ~ x1 + x2, formula_mean = ~ x1, data = data)
+#'   # Predict at new covariate values
+#'   newdata <- data.frame(x.1 = runif(10), x.2 = runif(10))
+#'   y_new <- predict(res, newdata = newdata, nsamp = 500)
+#'   # y_new is an array of shape nsamp x N_new x M
 #'   }
 #' }
 #' @export
@@ -404,99 +355,99 @@ shrinkMVTPR <- function(formula,
   # Initialize a variable to track whether the loop exited normally or due to interruption
   stop_reason <- "max_iterations"
   runtime <- system.time({
-    tryCatch({
-    for (i in 1:n_epochs) {
+    # tryCatch({
+      for (i in 1:n_epochs) {
 
-      # Sample from base distribution
-      z <- model$gen_batch(n_latent)
+        # Sample from base distribution
+        z <- model$gen_batch(n_latent)
 
-      # Forward pass through model
-      zk_log_det_J <- model(z)
-      zk_pos <- zk_log_det_J$zk
-      log_det_J <- zk_log_det_J$log_det_J
-
-
-      # Calculate loss, i.e. ELBO
-      # suppressWarnings because torchscript does not yet support torch.linalg.cholesky
-      loss <- suppressMessages(-model$elbo(zk_pos, log_det_J))
-
-      # Zero gradients
-      optimizer$zero_grad()
-
-      # Compute gradients, i.e. backprop
-      loss$backward()
-
-      # Clip gradients to avoid exploding gradients
-      nn_utils_clip_grad_norm_(model$parameters, max_norm = 0.5)
-
-      # Update parameters
-      optimizer$step()
-
-      # Store loss value
-      loss_stor[i] <- loss$item()
-
-      # Check if model is best
-      if (i == 1) {
-        best_model <- model$clone(deep = TRUE)
-        best_loss <- loss$item()
-      } else if (loss$item() < best_loss & !is.na(loss$item()) & !is.infinite(loss$item())) {
-        best_model <- model$clone(deep = TRUE)
-        best_loss <- loss$item()
-      }
+        # Forward pass through model
+        zk_log_det_J <- model(z)
+        zk_pos <- zk_log_det_J$zk
+        log_det_J <- zk_log_det_J$log_det_J
 
 
-      # Auto stop if no improvement in n_check iterations
-      if (auto_stop &
-          i %% n_check == 0 &
-          i > (n_check - 1)) {
-        X <- 1:n_check
-        Y <- loss_stor[(i - n_check + 1):i]
-        p_val <- lightweight_ols(Y, X)
+        # Calculate loss, i.e. ELBO
+        # suppressWarnings because torchscript does not yet support torch.linalg.cholesky
+        loss <- suppressMessages(-model$elbo(zk_pos, log_det_J))
 
-        # Slightly more lenient here, false positives are not as bad as false negatives
-        if (p_val > 0.2) {
-          stop_reason <- "auto_stop"
-          break
+        # Zero gradients
+        optimizer$zero_grad()
+
+        # Compute gradients, i.e. backprop
+        loss$backward()
+
+        # Clip gradients to avoid exploding gradients
+        nn_utils_clip_grad_norm_(model$parameters, max_norm = 0.5)
+
+        # Update parameters
+        optimizer$step()
+
+        # Store loss value
+        loss_stor[i] <- loss$item()
+
+        # Check if model is best
+        if (i == 1) {
+          best_model <- model$clone(deep = TRUE)
+          best_loss <- loss$item()
+        } else if (loss$item() < best_loss & !is.na(loss$item()) & !is.infinite(loss$item())) {
+          best_model <- model$clone(deep = TRUE)
+          best_loss <- loss$item()
         }
-      }
-
-      # Update progress bar
-      if (display_progress) {
-
-        # Prepare message, this way width can be set
-        avg_loss_msg <- "Avg. loss last 50 iter.: "
-        avg_loss_width <- 7
 
 
-        # If less than 50 iterations, don't show avg loss
-        if (i >= 50) {
+        # Auto stop if no improvement in n_check iterations
+        if (auto_stop &
+            i %% n_check == 0 &
+            i > (n_check - 1)) {
+          X <- 1:n_check
+          Y <- loss_stor[(i - n_check + 1):i]
+          p_val <- lightweight_ols(Y, X)
 
-          # Recalculate average loss every 10 iterations
-          if (i %% 10 == 0) {
-            avg_loss <- mean(loss_stor[(i - 49):i])
+          # Slightly more lenient here, false positives are not as bad as false negatives
+          if (p_val > 0.2) {
+            stop_reason <- "auto_stop"
+            break
           }
+        }
 
-          curr_message <- paste0(avg_loss_msg,
-                                 sprintf(paste0("%-", avg_loss_width, ".2f"), avg_loss))
-        } else {
-          curr_message <- format("", width = nchar(avg_loss_msg) + avg_loss_width)
+        # Update progress bar
+        if (display_progress) {
+
+          # Prepare message, this way width can be set
+          avg_loss_msg <- "Avg. loss last 50 iter.: "
+          avg_loss_width <- 7
+
+
+          # If less than 50 iterations, don't show avg loss
+          if (i >= 50) {
+
+            # Recalculate average loss every 10 iterations
+            if (i %% 10 == 0) {
+              avg_loss <- mean(loss_stor[(i - 49):i])
+            }
+
+            curr_message <- paste0(avg_loss_msg,
+                                   sprintf(paste0("%-", avg_loss_width, ".2f"), avg_loss))
+          } else {
+            curr_message <- format("", width = nchar(avg_loss_msg) + avg_loss_width)
+          }
+          pb$tick(tokens = list(message = curr_message))
         }
-        pb$tick(tokens = list(message = curr_message))
       }
-    }
-      }, interrupt = function(ex) {
-        stop_reason <<- "interrupted"
-        if (display_progress) {
-          pb$terminate()
-        }
-        message("\nTraining interrupted at iteration ", i, ". Returning model trained so far.")
-      }, error = function(ex) {
-        stop_reason <<- "error"
-        if (display_progress) {
-          pb$terminate()
-        }
-        message("\nError occurred at iteration ", i, ". Returning model trained so far.")
-      })
+    # }, interrupt = function(ex) {
+    #   stop_reason <<- "interrupted"
+    #   if (display_progress) {
+    #     pb$terminate()
+    #   }
+    #   message("\nTraining interrupted at iteration ", i, ". Returning model trained so far.")
+    # }, error = function(ex) {
+    #   stop_reason <<- "error"
+    #   if (display_progress) {
+    #     pb$terminate()
+    #   }
+    #   message("\nError occurred at iteration ", i, ". Returning model trained so far.")
+    # })
   })
 
 

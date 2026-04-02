@@ -34,10 +34,11 @@ if (torch::torch_is_installed()) {
   # Fit a model and save it
   sim <- simGPR()
   mod <- shrinkGPR(y ~ ., data = sim$data)
-  save_shrinkGPR(mod, "my_model.zip")
+  tmp <- tempfile(fileext = ".zip")
+  save_shrinkGPR(mod, tmp)
 
   # Load it back
-  mod_loaded <- load_shrinkGPR("my_model.zip")
+  mod_loaded <- load_shrinkGPR(tmp)
 
   # Continue training
   mod2 <- shrinkGPR(y ~ ., data = sim$data, cont_model = mod_loaded)

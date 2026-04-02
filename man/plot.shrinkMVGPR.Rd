@@ -7,7 +7,7 @@
 \method{plot}{shrinkMVGPR}(x, nsamp = 1000, ...)
 }
 \arguments{
-\item{x}{a \code{shrinkTPR} object.}
+\item{x}{a \code{shrinkMVGPR} object.}
 
 \item{nsamp}{a positive integer specifying the number of posterior samples to draw for plotting.
 The default is \code{1000}.}
@@ -28,7 +28,7 @@ Called for its side effects. Returns \code{invisible(NULL)}.
 if (torch::torch_is_installed()) {
 # Simulate and fit a shrinkMVGPR model, then plot:
 sim <- simMVGPR()
-mod <- shrinkMVPR(cbind(y.1, y.2) ~ ., data = sim$data)
+mod <- shrinkMVGPR(cbind(y.1, y.2) ~ ., data = sim$data)
 plot(mod)
 
 ## Change axis label orientation

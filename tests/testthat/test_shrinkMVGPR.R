@@ -121,6 +121,7 @@ params <- c("display_progress", "auto_stop")
 for (i in seq_len(nrow(scenarios))) {
   for (j in params) {
     args <- formals(shrinkMVGPR)
+    args$cont_model <- NULL  # Ensure cont_model is NULL for initial test
     args <- args[sapply(args, function(x) !is.null(x))]
 
     args[[j]] <- !args[[j]]

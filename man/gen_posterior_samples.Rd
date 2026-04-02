@@ -7,25 +7,42 @@
 gen_posterior_samples(mod, nsamp = 1000)
 }
 \arguments{
-\item{mod}{A \code{shrinkGPR} object representing the fitted Gaussian process regression model.}
+\item{mod}{A \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR} or \code{shrinkMVTPR} object representing the fitted model.}
 
 \item{nsamp}{Positive integer specifying the number of posterior samples to generate. Default is 1000.}
 }
 \value{
-A list containing posterior samples of the model parameters:
+For univariate models (\code{shrinkGPR}, \code{shrinkTPR}), a list containing posterior samples of the model parameters:
 \itemize{
 \item \code{thetas}: A matrix of posterior samples for the inverse lengthscale parameters.
 \item \code{sigma2}: A matrix of posterior samples for the noise variance.
-\item \code{lambda}: A matrix of posterior samples for the global shrinkage parameter.
+\item \code{tau}: A matrix of posterior samples for the global shrinkage parameter.
 \item \code{betas} (optional): A matrix of posterior samples for the mean equation parameters (if included in the model).
-\item \code{lambda_mean} (optional): A matrix of posterior samples for the mean equation's global shrinkage parameter (if included in the model).
+\item \code{tau_mean} (optional): A matrix of posterior samples for the mean equation's global shrinkage parameter (if included in the model).
+}
+Additionally, for a \code{shrinkTPR} model, the list also includes:
+\itemize{
+\item \code{nu}: A matrix of posterior samples for the degrees of freedom parameter.
+}
+For multivariate models (\code{shrinkMVGPR}, \code{shrinkMVTPR}), the list contains:
+\itemize{
+\item \code{thetas}: A matrix of posterior samples for the inverse lengthscale parameters.
+\item \code{tau}: A matrix of posterior samples for the global shrinkage parameter for the kernel.
+\item \code{sigma2}: A matrix of posterior samples for the noise variance.
+\item \code{tau_Om}: A matrix of posterior samples for the global shrinkage parameter for the output covariance.
+\item \code{Omega}: An array of posterior samples for the output covariance matrix.
+}
+Additionally, for a \code{shrinkMVTPR} model, the list also includes:
+\itemize{
+\item \code{nu}: A matrix of posterior samples for the degrees of freedom parameter.
 }
 }
 \description{
-\code{gen_posterior_samples} generates posterior samples of the model parameters from a fitted \code{shrinkGPR} or \code{shrinkTPR} model.
+\code{gen_posterior_samples} generates posterior samples of the model parameters from a fitted \code{shrinkGPR}, \code{shrinkTPR}, \code{shrinkMVGPR} or \code{shrinkMVTPR} model.
 }
 \details{
-This function draws posterior samples from the latent space and transforms them into the parameter space of the model. These samples can be used for posterior inference or further analysis.
+This function draws posterior samples from the latent space and transforms them into the parameter space of the model.
+These samples can be used for posterior inference or further analysis, such as examining which inverse lengthscale parameters pulled to zero.
 }
 \examples{
 \donttest{
