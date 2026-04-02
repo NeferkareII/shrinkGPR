@@ -4,10 +4,10 @@ output: github_document
 
 # shrinkGPR: Normalizing Flows for Hierarchical Shrinkage in Gaussian Process Regression Models
 
-This repository contains the development version of `shrinkGPR` package for Gaussian Process Regression with hierarchical shrinkage priors. 
-`shrinkGPR` uses the `torch` package to estimate the parameters via variational inference and does not function without it. Specifically, it is designed with GPU acceleration via CUDA in mind and may be slow without it. Guidance on how to install `torch` with CUDA support can be found [here](https://cran.r-project.org/web/packages/torch/vignettes/installation.html).
+This repository contains the development version of the `shrinkGPR` package for Gaussian Process Regression with hierarchical shrinkage priors. 
+`shrinkGPR` uses the `torch` package to estimate the parameters via variational inference and does not function without it. More specifically, it is designed with GPU acceleration via CUDA in mind and, while it will function with the CPU version of `torch`, it may be slow if used this way, especially for larger models. Guidance on how to install `torch` with CUDA support can be found [here](https://cran.r-project.org/web/packages/torch/vignettes/installation.html).
 
-The code below walks through a simple example, but is not exhaustive. It simulates data, fits a shrinkage GPR model, checks model convergence, extracts posterior samples, and makes predictions.
+The code below walks through a few simple examples, but is not exhaustive. It simulates data, fits uni/multivariate models with shrinkage priors on kernel parameters, checks model convergence, extracts posterior samples, and makes predictions.
 
 ## Prerequisites
 
@@ -35,20 +35,22 @@ library(shrinkGPR)
 
 ## Usage
 
-### Simulate Data
+### Univariate Response Models
 
-The simGPR function is used to simulate data for Gaussian Process Regression:
+#### Simulate Data
+
+The simGPR function is used to simulate data from a Gaussian process regression model:
 
 ```{r}
-torch_manual_seed(123)
-sim <- simGPR(N = 200, theta = c(10, 0, 0), d_mean = 0, sigma2 = 0.1)
+torch::torch_manual_seed(117)
+sim <- simGPR(N = 25, theta = c(10, 0, 0), d_mean = 0, sigma2 = 0.1)
 ```
 
 Only one covariate (the first one) truly has an impact on y. The other two covariates are noise.
 
-### Model Fitting
+#### Model Fitting
 
-Fit the shrinkage GPR model to the simulated data:
+Fitting the GPR model to the simulated data is done with the `shrinkGPR` function:
 
 ```{r}
 model <- shrinkGPR(y ~ ., data = sim$data, display_progress = FALSE)
@@ -56,47 +58,143 @@ model <- shrinkGPR(y ~ ., data = sim$data, display_progress = FALSE)
 
 `display_progress` is set to `FALSE` to avoid printing the progress bar.
 
-### Check Convergence
+Alternatively, a t-process can be fitted via the `shrinkTPR` function:
+
+```{r, eval = FALSE}
+model_t <- shrinkTPR(y ~ ., data = sim$data, display_progress = FALSE)
+```
+
+#### Check Convergence
 
 Plot the model's loss to monitor convergence:
 
 ```{r}
 plot(model$loss_stor, type = "l")
 ```
+#### Checking on Inverse Lengthscale Parameters
 
-### Generate posterior samples
-
-Generate posterior samples from the variational approximation:
+A quick check of covariate relevance can be performed by plotting the inverse lengthscale parameters $\theta_1, \dots, \theta_d$. This is what the `plot` method does when called on a `shrinkGPR` or `shrinkTPR` object:
 
 ```{r}
-samples <- gen_posterior_samples(model, nsamp = 10000)
+plot(model)
 ```
 
-Plot parallel boxplots of the parameters without outliers:
+#### Generate Posterior Samples
+
+More samples from the variational approximation can be generated with the `gen_posterior_samples` function:
 
 ```{r}
-boxplot(samples$thetas, lwd = 2, outline = FALSE, xaxt = "n")
-axis(1, at = 1:ncol(samples$thetas), labels = paste0("theta_", 1:3), las = 2, cex.axis = 0.7)
+samples <- gen_posterior_samples(model, nsamp = 1000)
 ```
 
-Note that the first parameter is the only one with a non-zero median. The other two parameters are shrunk towards zero.
-
-### Predictions
-
-Make predictions using the model:
+For example, this allows a more detailed look at the posterior distribution of the inverse lengthscale parameters:
 
 ```{r}
-preds <- predict(model, newdata = sim$data, nsamp = 1000)
+par(mfrow = c(1, 2))
+plot(density(samples$thetas[,1]), main = bquote("Posterior distribtion of" ~ theta[1]))
+plot(density(samples$sigma2), main = bquote("Posterior distribution of" ~ sigma^2))
+```
+
+#### Predictions
+
+calc_pred_moments can be used to calculate the predicted mean and variance for new data points. Here, we predict across a range of values for the first covariate while holding the other two covariates at zero:
+
+```{r}
+newdata <- data.frame(x.1 = seq(min(sim$data$x.1), max(sim$data$x.1), length.out = 200), x.2 = 0, x.3 = 0)
+preds <- calc_pred_moments(model, newdata = newdata, nsamp = 1000)
+```
+
+Alternatively, we can use the `predict` function to sample directly from the full posterior predictive distribution:
+
+```{r, eval=FALSE}
+preds_samples <- predict(model, newdata = newdata, nsamp = 1000)
 ```
 
 Plot the predicted values and 90% credible intervals:
 
 ```{r}
-preds_quantiles <- apply(preds, 2, quantile, c(0.05, 0.5, 0.95))
-order <- order(sim$data$x.1)
-plot(sim$data$x.1[order], sim$data$y[order], pch = 19, col = "black", xlab = "x1", ylab = "y")
-lines(sim$data$x.1[order], preds_quantiles[2, order], col = "forestgreen", lwd = 2)
-polygon(c(sim$data$x.1[order], rev(sim$data$x.1[order])),
-        c(preds_quantiles[1, order], rev(preds_quantiles[3, order])),
+preds_quantiles <- apply(preds$means, 2, quantile, c(0.05, 0.5, 0.95))
+
+plot(sim$data$x.1, sim$data$y, pch = 19, col = "black", xlab = "x1", ylab = "y", 
+     ylim = 1.4 * range(sim$data$y))
+lines(newdata$x.1, preds_quantiles[2, ], col = "forestgreen", lwd = 2)
+polygon(c(newdata$x.1, rev(newdata$x.1)),
+        c(preds_quantiles[1, ], rev(preds_quantiles[3, ])),
         col = adjustcolor("skyblue", alpha.f = 0.3), border = NA)
+```
+
+#### Sweep Over One Covariate
+
+The `gen_marginal_samples` function can be used to generate samples from the marginal posterior predictive distribution for a single covariate, while either fixing the other covariates or sampling them from the data used for training. Here, we sweep over the first covariate while holding the other two covariates at zero:
+
+```{r}
+fixed_data <- data.frame(x.2 = 0, x.3 = 0)
+marginal_samples <- gen_marginal_samples(model, to_eval = "x.1", fixed_x = fixed_data)
+```
+
+Marginal samples are equipped with a plot method, which can be used to visualize the marginal effects of the first covariate:
+
+```{r}
+plot(marginal_samples)
+```
+
+### Multivariate Response Models
+
+#### Simulate Data
+
+Simulating from a multivariate GPR model can be done with the `simMVGPR` function:
+```{r}
+torch::torch_manual_seed(42)
+sim_MV <- simMVGPR(N = 200, M = 3, d = 3, theta = c(3, 0, 0), sigma2 = 0.1)
+```
+
+#### Model Fitting
+
+Fitting a multivariate GPR model is done with the `shrinkMVGPR` function. Response covariates are specified via `cbind` in the formula:
+
+```{r}
+model_MV <- shrinkMVGPR(cbind(y.1, y.2, y.3) ~ ., data = sim_MV$data, display_progress = FALSE,
+                        optim_control = list(lr = 1e-3))
+```
+
+A small note here: The default learning rate for the multivariate models is set fairly conservatively at `1e-4`, to ensure convergence across a wide array of model sizes. For smaller models, this may be unnecessarily slow, and a learning rate of `1e-3` or even `1e-2` may be appropriate. If you find that convergence to be slow, try playing with the learning rate. 
+
+Analogous to the univariate case, a multivariate t-process can be fitted with the `shrinkMVTPR` function:
+
+```{r, eval = FALSE}
+model_MV_t <- shrinkMVTPR(cbind(y.1, y.2, y.3) ~ ., data = sim_MV$data, display_progress = FALSE)
+```
+
+#### Check Convergence
+
+Checking convergence is the same for the multivariate case. Plot the model's loss to monitor convergence:
+
+```{r}
+plot(model_MV$loss_stor, type = "l")
+```
+
+#### Checking Model and Generating posterior samples
+
+Functions for generating and visualizing samples from the variational approximation of the posterior are the same for the multivariate case. 
+
+```{r}
+plot(model_MV)
+```
+
+
+```{r}
+samples_MV <- gen_posterior_samples(model_MV, nsamp = 1000)
+
+par(mfrow = c(1, 2))
+plot(density(samples_MV$thetas[,1]), main = bquote("Posterior distribtion of" ~ theta[1]))
+plot(density(samples_MV$sigma2), main = bquote("Posterior distribution of" ~ sigma^2))
+```
+
+#### Predictions
+
+Marginal effects can be visualized with the `gen_marginal_samples` function, just like in the univariate case. Here, we visualize the marginal effect of the first covariate on the first response variable, while holding the other two covariates at zero:
+
+```{r}
+marg <- gen_marginal_samples(model_MV, to_eval = "x.1", fixed_x = data.frame(x.2 = 0, x.3 = 0))
+plot(marg)
 ```

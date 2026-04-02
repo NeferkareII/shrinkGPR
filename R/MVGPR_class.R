@@ -77,8 +77,7 @@ MVGPR_class <- nn_module(
     K_eps <- K + I * sigma2$view(c(n_latent, 1, 1))
     L_K <- robust_chol(K_eps, upper = FALSE)
     .shrinkGPR_internal$jit_funcs$ldnorm_multi(L_K, L_Om, self$y, as.integer(self$M), as.integer(self$N))
-  }
-  ,
+  },
 
   # Unnormalised log density of triple gamma prior
   ltg = function(x, a, c, lam) {
@@ -202,7 +201,7 @@ MVGPR_class <- nn_module(
     theta_start <- omega_comp + 1
     theta_end <- omega_comp + self$d
     # push theta block negative so softplus(theta) starts near small values
-    z[, theta_start:theta_end] <- z[, theta_start:theta_end] - 8
+    z[, theta_start:theta_end] <- z[, theta_start:theta_end] - 2
 
     return(z)
   },
