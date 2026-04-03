@@ -699,6 +699,9 @@ gen_marginal_samples <- function(mod, to_eval, nsamp = 200, fixed_x, n_eval_poin
 
   # Check that to_eval are valid covariate names in the model
   valid_covariates <- attr(mod$model_internals$terms, "term.labels")
+  if (mod$model_internals$x_mean) {
+    valid_covariates <- c(valid_covariates, attr(mod$model_internals$terms_mean, "term.labels"))
+  }
   if (!all(to_eval %in% valid_covariates)) {
     stop("The covariates specified in 'to_eval' must be names present in the colnames of the model's data.")
   }

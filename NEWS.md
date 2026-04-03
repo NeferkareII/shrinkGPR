@@ -1,6 +1,7 @@
 ## Changes in Version 2.0.1:
   - Updated README.md to be more informative, as well as include multivariate case
   - Fixed an issue with the distribution of the latent variables in shrinkMVGPR causing lack of convergence in some cases
+  - Fixed a bug that didn't allow for covariates in the mean formula to be used in gen_marginal_samples()
 
 ## Changes in Version 2.0.0:
   - Potentially breaking change: Changed name of global shrinkage parameter from lambda to tau, as to be more consistent with references
