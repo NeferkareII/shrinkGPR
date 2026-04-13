@@ -58,8 +58,8 @@ MVGPR_class <- nn_module(
     self$model <- nn_sequential(self$layers)
 
     # Add data to the model
-    self$y <- nn_buffer(y$to(device = self$device))
-    self$x <- nn_buffer(x$to(device = self$device))
+    self$y <- nn_buffer(y$to(device = self$device, dtype = torch_float()))
+    self$x <- nn_buffer(x$to(device = self$device, dtype = torch_float()))
 
     # #create holders for prior a, c, lam and rate
     self$prior_a <- nn_buffer(torch_tensor(a, device = self$device, requires_grad = FALSE))
@@ -73,8 +73,8 @@ MVGPR_class <- nn_module(
   # Unnormalised log likelihood for MV Gaussian Process
   ldnorm = function(K, L_Om, sigma2) {
     n_latent <- K$size(1)
-    I <- torch_eye(self$N, device=self$device)$unsqueeze(1)$expand(c(n_latent, self$N, self$N))
-    K_eps <- K + I * sigma2$view(c(n_latent, 1, 1))
+    K_eps <- K$clone()
+    K_eps$diagonal(dim1=2L, dim2=3L)$add_(sigma2$unsqueeze(2L))
     L_K <- robust_chol(K_eps, upper = FALSE)
     .shrinkGPR_internal$jit_funcs$ldnorm_multi(L_K, L_Om, self$y, as.integer(self$M), as.integer(self$N))
   },
@@ -259,13 +259,11 @@ MVGPR_class <- nn_module(
     beta <- 10
     diag <- torch_diagonal(L_Om, dim1=2, dim2=3)
     diag2 <- eps_diag + nnf_softplus(diag - eps_diag, beta = beta)
+    # Compute log-Jacobian of diagonal biasing before modifying L_Om in-place
+    diag_biasing_logJ <- torch_sum(torch_log(torch_sigmoid(10.0 * (diag - eps_diag))), dim = 2)
+    L_Om$diagonal(dim1=2L, dim2=3L)$copy_(diag2)
 
-    L_Om2 <- L_Om$clone()
-    L_Om2$diagonal(dim1=2, dim2=3)$copy_(diag2)
-
-
-
-    likelihood <- self$ldnorm(K, L_Om2, sigma_zk)$mean()
+    likelihood <- self$ldnorm(K, L_Om, sigma_zk)$mean()
     if (torch_isnan(likelihood)$item()) {
       stop("Likelihood is NaN")
     }
@@ -287,7 +285,6 @@ MVGPR_class <- nn_module(
       # Prior on sigma^2
       self$lexp(sigma_zk, self$prior_rate)$mean()
 
-    diag_biasing_logJ <- torch_sum(torch_log(torch_sigmoid(10.0 * (diag - eps_diag))), dim = 2)
     var_dens <- log_det_J$mean() + D_chol_zk$logJ$mean() + log_det_S$mean() + diag_biasing_logJ$mean()
 
     # Compute ELBO
@@ -363,18 +360,15 @@ MVGPR_class <- nn_module(
       beta <- 10
       diag <- torch_diagonal(L_Om, dim1=2, dim2=3)
       diag2 <- eps_diag + nnf_softplus(diag - eps_diag, beta = beta)
-
-      L_Om2 <- L_Om$clone()
-      L_Om2$diagonal(dim1=2, dim2=3)$copy_(diag2)
-      Omega <- torch_bmm(L_Om2, L_Om2$permute(c(1, 3, 2)))
+      L_Om$diagonal(dim1=2L, dim2=3L)$copy_(diag2)
+      Omega <- torch_bmm(L_Om, L_Om$permute(c(1, 3, 2)))
 
       # Transform covariance matrix K and transform into L and alpha
       # L is the cholseky decomposition of K + sigma^2I, i.e. the covariance matrix of the GP
       # alpha is the solution to L L^T alpha = y, i.e. (K + sigma^2I)^{-1}y
-      single_eye <- torch_eye(self$N, device = self$device)
-      batch_sigma2 <- single_eye$`repeat`(c(nsamp, 1, 1)) *
-        sigma_zk$unsqueeze(2)$unsqueeze(2)
-      L <- robust_chol(K + batch_sigma2, upper = FALSE)
+      K_eps <- K$clone()
+      K_eps$diagonal(dim1=2L, dim2=3L)$add_(sigma_zk$unsqueeze(2L))
+      L <- robust_chol(K_eps, upper = FALSE)
 
       alpha <- torch_cholesky_solve(self$y, L, upper = FALSE)
 
@@ -388,12 +382,9 @@ MVGPR_class <- nn_module(
       # Calculate the predictive mean and variance
       pred_mean <- torch_bmm(K_star_t, alpha)
 
-
-      single_eye_new <- torch_eye(N_new, device = self$device)
-      batch_sigma2_new <- single_eye_new$`repeat`(c(nsamp, 1, 1)) *
-        sigma_zk$unsqueeze(2)$unsqueeze(2)
       v <- linalg_solve_triangular(L, K_star_t$permute(c(1, 3, 2)), upper = FALSE)
-      K_post <- K_star_star - torch_matmul(v$permute(c(1, 3, 2)), v) + batch_sigma2_new
+      K_post <- K_star_star - torch_matmul(v$permute(c(1, 3, 2)), v)
+      K_post$diagonal(dim1=2L, dim2=3L)$add_(sigma_zk$unsqueeze(2L))
 
       return(list(pred_mean = pred_mean, K = K_post, Omega = Omega))
     })
@@ -418,12 +409,10 @@ MVGPR_class <- nn_module(
       beta <- 10
       diag <- torch_diagonal(L_Om, dim1=2, dim2=3)
       diag2 <- eps_diag + nnf_softplus(diag - eps_diag, beta = beta)
-
-      L_Om2 <- L_Om$clone()
-      L_Om2$diagonal(dim1=2, dim2=3)$copy_(diag2)
+      L_Om$diagonal(dim1=2L, dim2=3L)$copy_(diag2)
 
       Z <- torch_randn(c(nsamp, N_new, self$M), device=self$device)
-      pred_samples <- pred_mean + torch_bmm(torch_bmm(L_S, Z), L_Om2$permute(c(1, 3, 2)))
+      pred_samples <- pred_mean + torch_bmm(torch_bmm(L_S, Z), L_Om$permute(c(1, 3, 2)))
 
       return(pred_samples)
     })

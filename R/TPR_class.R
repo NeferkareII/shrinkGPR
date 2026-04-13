@@ -66,10 +66,10 @@ TPR_class <- nn_module(
     self$model <- nn_sequential(self$layers)
 
     # Add data to the model
-    self$y <- nn_buffer(y$unsqueeze(2)$to(device = self$device))
-    self$x <- nn_buffer(x$to(device = self$device))
+    self$y <- nn_buffer(y$unsqueeze(2)$to(device = self$device, dtype = torch_float()))
+    self$x <- nn_buffer(x$to(device = self$device, dtype = torch_float()))
     if (!self$mean_zero) {
-      self$x_mean <- nn_buffer(x_mean$to(device = self$device))
+      self$x_mean <- nn_buffer(x_mean$to(device = self$device, dtype = torch_float()))
     } else {
       self$x_mean <- NULL
     }
@@ -171,10 +171,9 @@ TPR_class <- nn_module(
     tryCatch({
       likelihood <- self$ldt(K, NULL, sigma_zk, beta, nu_zk)$mean()
     }, error = function(ex) {
-      single_eye <- torch_eye(self$N, device = self$device)
-      batch_sigma2 <- single_eye$`repeat`(c(sigma_zk$shape[1], 1, 1)) *
-        sigma_zk$unsqueeze(2)$unsqueeze(2)
-      L <- robust_chol(K + batch_sigma2, upper = FALSE)
+      K_eps <- K$clone()
+      K_eps$diagonal(dim1=2L, dim2=3L)$add_(sigma_zk$unsqueeze(2L))
+      L <- robust_chol(K_eps, upper = FALSE)
 
       likelihood <<- self$ldt(K, L, sigma_zk, beta, nu_zk)$mean()
     })
@@ -228,10 +227,9 @@ TPR_class <- nn_module(
       # alpha is the solution to L L^T alpha = y, i.e. (K + sigma^2I)^{-1}y
 
       K <- self$kernel_func(l2_zk, tau_zk, self$x)
-      single_eye <- torch_eye(self$N, device = self$device)
-      batch_sigma2 <- single_eye$`repeat`(c(nsamp, 1, 1)) *
-        sigma_zk$unsqueeze(2)$unsqueeze(2)
-      L <- robust_chol(K + batch_sigma2, upper = FALSE)
+      K_eps <- K$clone()
+      K_eps$diagonal(dim1=2L, dim2=3L)$add_(sigma_zk$unsqueeze(2L))
+      L <- robust_chol(K_eps, upper = FALSE)
 
       if (self$mean_zero) {
         alpha <- torch_cholesky_solve(self$y, L, upper = FALSE)
@@ -242,10 +240,8 @@ TPR_class <- nn_module(
       }
 
       # Calculate K_star_star, the covariance between the test data
-      single_eye <- torch_eye(N_new, device = self$device)
-      batch_sigma2 <- single_eye$`repeat`(c(nsamp, 1, 1)) *
-        sigma_zk$unsqueeze(2)$unsqueeze(2)
-      K_star_star <- self$kernel_func(l2_zk, tau_zk, x_new) + batch_sigma2
+      K_star_star <- self$kernel_func(l2_zk, tau_zk, x_new)
+      K_star_star$diagonal(dim1=2L, dim2=3L)$add_(sigma_zk$unsqueeze(2L))
 
       # Calculate K_star, the covariance between the training and test data
       K_star_t <- self$kernel_func(l2_zk, tau_zk, self$x, x_new)
@@ -258,9 +254,6 @@ TPR_class <- nn_module(
           torch_matmul(x_mean_new, beta$t())$t()$squeeze()
       }
 
-      single_eye_new <- torch_eye(N_new, device = self$device)
-      batch_sigma2_new <- single_eye_new$`repeat`(c(nsamp, 1, 1)) *
-        sigma_zk$unsqueeze(2)$unsqueeze(2)
       v <- linalg_solve_triangular(L, K_star_t$permute(c(1, 3, 2)), upper = FALSE)
       if (self$mean_zero) {
         pred_scale <- (K_star_star - torch_matmul(v$permute(c(1, 3, 2)), v)) *
