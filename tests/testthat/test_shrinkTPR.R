@@ -113,7 +113,7 @@ test_shrinkTPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
 scenarios <- expand.grid(
   auto_stop = c(TRUE, FALSE),
   kernel = c(kernel_se, kernel_matern_32),
-  flow = c(sylvester)
+  flow = c(sylvester, nsf_cl, iaf)
 )
 names(scenarios) <- c("auto_stop", "kernel", "flow")
 

@@ -17,7 +17,8 @@ robust_hyperu <- function(a, b, z) {
     torch_exp(-torch_lgamma(1 - b) - torch_lgamma(a - b + 1))
 
   # Approximation for small z and b = 1
-  res[small_z & b == 1] <- -torch_exp(-torch_lgamma(a) - torch_log(z[small_z & b == 1] + torch_digamma(a) + 0.57721566490153286060651209008240243))
+  res[small_z & b == 1] <- -torch_exp(-torch_lgamma(a)) *
+    (torch_log(z[small_z & b == 1]) + torch_digamma(a) + 2 * 0.57721566490153286060651209008240243)
 
   # Approximation for small z and 0 < b < 1
   res[small_z & b < 1 & b > 0] <- torch_exp(torch_lgamma(1 - b) - torch_lgamma(a - b + 1))

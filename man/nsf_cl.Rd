@@ -2,25 +2,81 @@
 % Please edit documentation in R/NSF.R
 \name{nsf_cl}
 \alias{nsf_cl}
-\title{Neural Spline Flow -- Coupling Layer (NSF_CL)}
+\title{Neural Spline Flow (Coupling Layer)}
 \usage{
-nsf_cl(d, K = 5, B = 3, hidden_dim = 64)
+nsf_cl(d, K = 10, B = 10, hidden_dim = NULL)
 }
 \arguments{
-\item{d}{integer, dimensionality of the input}
+\item{d}{An integer specifying the latent dimensionality of the input space.}
 
-\item{K}{integer, number of spline bins (default 5)}
+\item{K}{An integer specifying the number of spline bins (default 10). Larger values give more
+flexible splines at the cost of more parameters.}
 
-\item{B}{numeric, tail bound for the spline (default 3)}
+\item{B}{A numeric specifying the tail bound of the spline (default 10). The spline acts on
+\eqn{[-B, B]} and is the identity outside this interval.}
 
-\item{hidden_dim}{integer, hidden layer width (default 64)}
+\item{hidden_dim}{An optional integer specifying the hidden layer width of the coupling networks.
+Defaults to \code{max(64, 2 * d)}.}
 }
 \value{
-An \code{nn_module} implementing the NSF-CL layer.
+An \code{nn_module} object representing the neural spline flow coupling layer. The module
+has the following key components:
+\itemize{
+\item \code{forward(z)}: The forward pass computes the transformed variable \code{zk} and the
+log determinant of the Jacobian \code{log_diag_j}.
+\item Internal parameters include the LU factors (\code{L_raw}, \code{U_raw}, \code{log_diag_U})
+of the invertible linear map and the coupling networks \code{f1} and \code{f2}.
+}
 }
 \description{
-Implements the coupling-layer neural spline flow from Durkan et al. (2019)
-using rational-quadratic splines. Conforms to the flow interface expected
-by \code{GPR_class}: \code{forward(z)} returns a list with \code{zk} and
-\code{log_diag_j}.
+The \code{nsf_cl} function implements a coupling-layer neural spline flow as described by
+Durkan et al. (2019) in "Neural Spline Flows." Each layer applies a learned monotonic
+rational-quadratic spline to one half of the inputs, conditioned on the other half, preceded
+by an LU-decomposed invertible linear transformation that mixes the dimensions. This yields a
+flexible, invertible map for approximating complex posteriors in Gaussian process regression models.
+}
+\details{
+Each layer first applies an invertible linear transformation parameterized through its LU
+decomposition,
+\deqn{W = P L U,}
+where \code{P} is a fixed permutation, \code{L} is unit lower triangular, and \code{U} is upper
+triangular with a learned positive diagonal. Its log determinant is
+\deqn{\log |det W| = \sum_{i=1}^d \log U_{ii}.}
+
+The inputs are then split into two halves. One half is transformed elementwise by a monotonic
+rational-quadratic spline whose bin widths, heights, and internal derivatives are produced by a
+neural network conditioned on the other half; the roles of the two halves are then swapped. On
+bin \eqn{k}, with \eqn{\xi = (x - x_k) / (x_{k+1} - x_k)}, bin slope
+\eqn{s_k = (y_{k+1} - y_k) / (x_{k+1} - x_k)}, and boundary derivatives \eqn{\delta_k, \delta_{k+1}},
+the spline is
+\deqn{g(\xi) = y_k + \frac{(y_{k+1} - y_k)(s_k \xi^2 + \delta_k \xi (1 - \xi))}{s_k + (\delta_{k+1} + \delta_k - 2 s_k) \xi (1 - \xi)},}
+with derivative
+\deqn{g'(\xi) = \frac{s_k^2 (\delta_{k+1} \xi^2 + 2 s_k \xi (1 - \xi) + \delta_k (1 - \xi)^2)}{[s_k + (\delta_{k+1} + \delta_k - 2 s_k) \xi (1 - \xi)]^2}.}
+
+Because both the linear map and each coupling step have triangular Jacobians, the total log
+determinant is the sum of the linear-map term and the per-dimension log spline derivatives:
+\deqn{\log |det J| = \sum_{i=1}^d \log U_{ii} + \sum_i \log g'(\xi_i).}
+}
+\examples{
+if (torch::torch_is_installed()) {
+  # Example: Initialize a neural spline flow coupling layer
+  d <- 5
+  flow <- nsf_cl(d)
+
+  # Forward pass through the flow
+  z <- torch::torch_randn(10, d)  # Batch of 10 samples
+  result <- flow(z)
+
+  print(result$zk)
+  print(result$log_diag_j)
+}
+}
+\references{
+Durkan, C., Bekasov, A., Murray, I., & Papamakarios, G. (2019).
+"Neural Spline Flows."
+\emph{Advances in Neural Information Processing Systems 32 (NeurIPS 2019)}.
+
+Kingma, D. P., & Dhariwal, P. (2018).
+"Glow: Generative Flow with Invertible 1x1 Convolutions."
+\emph{Advances in Neural Information Processing Systems 31 (NeurIPS 2018)}.
 }
