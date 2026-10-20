@@ -63,9 +63,10 @@ robust_chol <- function(A, tol = 1e-6, upper = FALSE) {
   if (upper) Lower$L$permute(c(1, 3, 2)) else Lower$L
 }
 
-# Prevents values from being too close to zero
+# Prevents values from being too close to zero (from either side)
 res_protector_autograd <- function(x, tol = 1e-6) {
-  torch_clamp(x, min = tol)
+  s <- 2 * (x >= 0)$to(dtype = x$dtype) - 1
+  s * torch_clamp(torch_abs(x), min = tol)
 }
 
 

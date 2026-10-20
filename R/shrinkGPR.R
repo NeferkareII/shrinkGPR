@@ -49,7 +49,7 @@
 #' \deqn{f \sim \mathcal{GP}(\mu(\cdot),\; k(\cdot, \cdot\,;\, \theta, \tau)).}
 #' The default squared exponential kernel is
 #' \deqn{k(x, x';\, \theta, \tau) = \frac{1}{\tau} \exp\!\left(-\frac{1}{2} \sum_{j=1}^d \theta_j (x_j - x'_j)^2\right),}
-#' where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{\tau > 0} is the output scale. 
+#' where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{\tau > 0} is the output scale.
 #' Users can specify custom kernels by following the guidelines below, or use one of the other provided kernel functions in \code{\link{kernel_functions}}.
 #' If \code{formula_mean} is provided, the GP mean becomes \eqn{x_{\mu,i}^\top \beta} instead of zero.
 #'
@@ -65,7 +65,7 @@
 #'
 #' \strong{Inference}
 #'
-#' The posterior is approximated by a normalizing flow \eqn{q_\phi} trained to maximize the ELBO. The default flow is a 
+#' The posterior is approximated by a normalizing flow \eqn{q_\phi} trained to maximize the ELBO. The default flow is a
 #' Sylvester flow (van den Berg et al. 2018), but users can specify custom flows by following the guidelines below.
 #' \code{auto_stop} triggers early stopping when the ELBO shows no significant improvement over the last 100 iterations.
 #'
@@ -373,8 +373,8 @@ shrinkGPR <- function(formula,
   } else {
     model <- cont_model$last_model
     optimizer <- cont_model$optimizer
-    best_model <- cont_model$best_model
-    best_loss <- cont_model$best_loss
+    best_model <- cont_model$model
+    best_loss <- cont_model$loss
   }
 
   # Create progress bar if display_progress is TRUE

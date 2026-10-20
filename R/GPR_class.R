@@ -95,7 +95,7 @@ GPR_class <- nn_module(
   ltg = function(x, a, c, tau) {
     res <-  - 0.5 * torch_log(tau$unsqueeze(2)) -
       0.5 * torch_log(x) +
-      log_hyperu(c + 0.5, 1.5 - a, a*x/(c * tau$unsqueeze(2)))
+      log_hyperu(c + 0.5, 1.5 - a, a*x/(2.0 * c * tau$unsqueeze(2)))
 
     return(res)
   },
@@ -103,7 +103,7 @@ GPR_class <- nn_module(
   # Unnormalised log density of normal-gamma-gamma prior
   ngg = function(x, a, c, tau) {
     res <- - 0.5 * torch_log(tau$unsqueeze(2)) +
-      log_hyperu(c + 0.5, 1.5 - a,  a * x^2/(c * tau$unsqueeze(2)))
+      log_hyperu(c + 0.5, 1.5 - a,  a * x^2/(2.0 * c * tau$unsqueeze(2)))
 
     return(res)
   },

@@ -1,4 +1,11 @@
-## Changes in Version 2.0.1:
+## Changes in Version 2.1.1:
+  - Fixed bug in prior for shrinkTPR
+  - Fixed bug in calc_pred_moments for shrinkTPR
+  - Fixed bug in the implementation of cont_model
+  - Fixed bug in the implementation of the U function in log_hyperu
+
+## Changes in Version 2.1.0:
+  - Added new flow architectures, specifically the Neural Spine Flow (Durkan et al., 2019) and the Inverse Autoregressive Flow (Kingma et al., 2016)
   - Updated README.md to be more informative, as well as include multivariate case
   - Fixed an issue with the distribution of the latent variables in shrinkMVGPR causing lack of convergence in some cases
   - Fixed a bug that didn't allow for covariates in the mean formula to be used in gen_marginal_samples()

@@ -7,7 +7,7 @@
 #' provide greater robustness to outliers. The joint posterior is approximated by normalizing flows trained to maximize the ELBO.
 #'
 #' @param formula object of class "formula": a symbolic representation of the model for the covariance equation, as in \code{\link{lm}}.
-#' The response variable and covariates are specified here. Specifically, the response is created by binding the \eqn{M} response variables together with 
+#' The response variable and covariates are specified here. Specifically, the response is created by binding the \eqn{M} response variables together with
 #' \code{cbind()} on the left-hand side of the formula, e.g., \code{cbind(y1, y2) ~ x}.
 #' @param data \emph{optional} data frame containing the response variable and the covariates. If not found in \code{data},
 #' the variables are taken from \code{environment(formula)}. No \code{NA}s are allowed in the response variable or covariates.
@@ -60,10 +60,10 @@
 #' The product of the diagonal elements of \eqn{S} is constrained to equal 1 to ensure identifiability.
 #' The default squared exponential kernel is
 #' \deqn{k(x, x';\, \theta, \tau) = \frac{1}{\tau} \exp\!\left(-\frac{1}{2} \sum_{j=1}^d \theta_j (x_j - x'_j)^2\right),}
-#' where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{\tau > 0} is the output scale. 
-#' Users can specify custom kernels by following the guidelines below, or use one of the other provided kernel functions in 
+#' where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{\tau > 0} is the output scale.
+#' Users can specify custom kernels by following the guidelines below, or use one of the other provided kernel functions in
 #' \code{\link{kernel_functions}}.
-#' 
+#'
 #' \strong{Priors}
 #'
 #' \deqn{\theta_j \mid \tau \sim \mathrm{TG}(a, c, \tau), \quad j = 1, \ldots, d,}
@@ -327,8 +327,8 @@ shrinkMVTPR <- function(formula,
   } else {
     model <- cont_model$last_model
     optimizer <- cont_model$optimizer
-    best_model <- cont_model$best_model
-    best_loss <- cont_model$best_loss
+    best_model <- cont_model$model
+    best_loss <- cont_model$loss
   }
 
   # Create progress bar if display_progress is TRUE

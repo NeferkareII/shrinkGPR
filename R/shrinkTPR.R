@@ -372,8 +372,8 @@ shrinkTPR <- function(formula,
   } else {
     model <- cont_model$last_model
     optimizer <- cont_model$optimizer
-    best_model <- cont_model$best_model
-    best_loss <- cont_model$best_loss
+    best_model <- cont_model$model
+    best_loss <- cont_model$loss
   }
 
   # Create progress bar if display_progress is TRUE
