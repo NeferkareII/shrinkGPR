@@ -180,13 +180,13 @@ TPR_class <- nn_module(
     })
 
     prior <- self$ltg(l2_zk, self$prior_a, self$prior_c, tau_zk)$sum(dim = 2)$mean() +
-      self$ldf(tau_zk, 2*self$prior_a, 2*self$prior_c)$mean() +
+      self$ldf(tau_zk, 2*self$prior_c, 2*self$prior_a)$mean() +
       self$lexp(sigma_zk, self$prior_rate)$mean() +
       self$ldg(nu_zk - 2, self$nu_alpha, self$nu_beta)$mean()
 
     if (!self$mean_zero) {
       prior <- prior + self$ngg(beta, self$prior_a_mean, self$prior_c_mean, tau_mean)$sum(dim = 2)$mean() +
-        self$ldf(tau_mean, 2*self$prior_a_mean, 2*self$prior_c_mean)$mean()
+        self$ldf(tau_mean, 2*self$prior_c_mean, 2*self$prior_a_mean)$mean()
     }
 
     var_dens <- log_det_J$mean()
