@@ -3,6 +3,7 @@
   - Fixed bug in calc_pred_moments for shrinkTPR
   - Fixed bug in the implementation of cont_model
   - Fixed bug in the implementation of the U function in log_hyperu
+  - Fixed a bug in gen_marginal_samples
 
 ## Changes in Version 2.1.0:
   - Added new flow architectures, specifically the Neural Spine Flow (Durkan et al., 2019) and the Inverse Autoregressive Flow (Kingma et al., 2016)
