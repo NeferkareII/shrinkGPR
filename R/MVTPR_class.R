@@ -148,7 +148,9 @@ MVTPR_class <- nn_module(
     tau_zk <- zk_pos[, (omega_comp + self$d + 1)]
     tau_Om_zk <- zk_pos[, (omega_comp + self$d + 2)]
     sigma_zk <- zk_pos[, (omega_comp + self$d + 3)]
-    nu_zk <- zk_pos[, (omega_comp + self$d + 4)]
+
+    nu_raw <- zk_pos[, (omega_comp + self$d + 4)]
+    nu_zk  <- nu_raw + 2
 
     # Res protector to avoid issues with 0 values
     theta_zk <- res_protector_autograd(theta_zk)
@@ -207,7 +209,7 @@ MVTPR_class <- nn_module(
       # Prior on sigma^2
       self$lexp(sigma_zk, self$prior_rate)$mean() +
       # Prior on nu
-      self$ldg(nu_zk, self$nu_alpha, self$nu_beta)$mean()
+      self$ldg(nu_raw, self$nu_alpha, self$nu_beta)$mean()
 
     diag_biasing_logJ <- torch_sum(torch_log(torch_sigmoid(10.0 * (diag - eps_diag))), dim = 2)
     var_dens <- log_det_J$mean() + D_chol_zk$logJ$mean() + log_det_S$mean() + diag_biasing_logJ$mean()
@@ -250,12 +252,12 @@ MVTPR_class <- nn_module(
       tau_zk <- zk_pos[, (omega_comp + self$d + 1)]
       tau_Om_zk <- zk_pos[, (omega_comp + self$d + 2)]
       sigma_zk <- zk_pos[, (omega_comp + self$d + 3)]
-      nu_zk <- zk_pos[, (omega_comp + self$d + 4)]
+      nu_zk <- zk_pos[, (omega_comp + self$d + 4)] + 2
 
       # Res protector to avoid issues with 0 values
       theta_zk <- res_protector_autograd(theta_zk)
       tau_zk <- res_protector_autograd(tau_zk, tol = 1e-4)
-      sigma_zk <- res_protector_autograd(sigma_zk)
+      sigma_zk <- res_protector_autograd(sigma_zk, tol = 1e-4)
 
       # Calculate covariance matrix Sigma
       K <- self$kernel_func(theta_zk, tau_zk, self$x)
@@ -340,32 +342,11 @@ MVTPR_class <- nn_module(
       pred_K <- aperm(pred_K, c(2, 3, 1))
       pred_Omega <- aperm(pred_Omega, c(2, 3, 1))
 
-      pred_samples <- mniw::rMT(nsamp, pred_mean, pred_K, pred_Omega, pred_nu)
+      pred_samples <- mniw::rMT(nsamp, pred_mean, pred_K, pred_Omega, pred_nu + self$M - 1)
 
       # Permute back to (nsamp, N_new, M)
       pred_samples <- aperm(pred_samples, c(3, 1, 2))
 
-      # L_S <- robust_chol(pred_K)
-      #
-      # Z <- torch_randn(c(nsamp, N_new, self$M), device=self$device)
-      #
-      # # Posterior degrees of freedom: nu_hat = nu + N
-      # nu_hat <- pred_nu
-      #
-      # # Sample g ~ Gamma(nu_hat/2, nu_hat/2) per draw, so E[g] = 1
-      # # Then w = 1/g gives the inverse-chi-squared scaling
-      # # sqrt(w) applied to the Gaussian draws produces matrix-t samples
-      # g <- distr_gamma(
-      #   concentration = (nu_hat / 2)$view(c(-1)),
-      #   rate = torch_tensor(0.5, device = self$device)
-      # )$sample()
-      #
-      # w <- (1 / g)$view(c(-1, 1, 1))
-      #
-      # L_Om <- robust_chol(pred_Omega)
-      # pred_samples <- pred_mean +
-      #   torch_sqrt(w) * torch_bmm(torch_bmm(L_S, Z), L_Om$permute(c(1, 3, 2)))
-      #
       return(pred_samples)
 
     })
