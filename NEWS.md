@@ -5,6 +5,7 @@
   - Fixed bug in the implementation of the U function in log_hyperu
   - Fixed a bug in gen_posterior_samples
 
+
 ## Changes in Version 2.1.0:
   - Added new flow architectures, specifically the Neural Spine Flow (Durkan et al., 2019) and the Inverse Autoregressive Flow (Kingma et al., 2016)
   - Updated README.md to be more informative, as well as include multivariate case
