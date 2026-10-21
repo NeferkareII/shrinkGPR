@@ -300,6 +300,7 @@ shrinkGPR <- function(formula,
 
   # Create Matrix X with dummies and transformations
   x <- model.matrix(object = mt, data = mf)
+  x_colnames <- colnames(x)
 
   # Check that there are no NAs in y and x
   if (any(is.na(y))) {
@@ -506,7 +507,8 @@ shrinkGPR <- function(formula,
       terms = mt,
       xlevels = .getXlevels(mt, mf),
       data = data,
-      d_cov = x$shape[2]
+      d_cov = x$shape[2],
+      x_names = x_colnames
     )
 
     if (!is.null(x_mean)) {

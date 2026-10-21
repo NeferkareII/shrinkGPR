@@ -532,7 +532,10 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
                 sigma2 = as.matrix(zk[, d_cov + 1]),
                 tau = as.matrix(zk[, d_cov + 2]))
 
-    colnames(res$thetas) <- paste0("theta_", attr(mod$model_internals$terms, "term.labels"))
+    x_names <- mod$model_internals$x_names
+    # Models fitted or saved before x_names existed only have the term labels
+    if (is.null(x_names)) x_names <- attr(mod$model_internals$terms, "term.labels")
+    colnames(res$thetas) <- paste0("theta_", x_names)
 
 
     if (mod$model_internals$x_mean) {
@@ -615,10 +618,13 @@ gen_posterior_samples <- function(mod, nsamp = 1000) {
                 tau_Om = as.matrix(tau_Om_zk),
                 Omega = Omega_mats)
 
-    colnames(res$thetas) <- paste0("theta_", attr(mod$model_internals$terms, "term.labels"))
+    x_names <- mod$model_internals$x_names
+    # Models fitted or saved before x_names existed only have the term labels
+    if (is.null(x_names)) x_names <- attr(mod$model_internals$terms, "term.labels")
+    colnames(res$thetas) <- paste0("theta_", x_names)
 
     if ("shrinkMVTPR" %in% class(mod)) {
-      res$nu <- as.matrix(zk[, (omega_comp + d_cov + 4)])
+      res$nu <- as.matrix(zk[, (omega_comp + d_cov + 4)]) + 2
     }
   }
 
