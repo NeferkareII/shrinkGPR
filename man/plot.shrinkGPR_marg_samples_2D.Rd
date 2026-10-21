@@ -4,11 +4,14 @@
 \alias{plot.shrinkGPR_marg_samples_2D}
 \title{Plot method for 2D marginal predictions}
 \usage{
-\method{plot}{shrinkGPR_marg_samples_2D}(x, ...)
+\method{plot}{shrinkGPR_marg_samples_2D}(x, response = 1, ...)
 }
 \arguments{
 \item{x}{An object of class \code{"shrinkGPR_marg_samples_2D"}, typically returned by
 \code{\link{gen_marginal_samples}} when evaluating two covariates.}
+
+\item{response}{For multivariate models (\code{shrinkMVGPR}, \code{shrinkMVTPR}), the index of the response to plot,
+an integer between 1 and \code{M}. Defaults to 1. Ignored for univariate models.}
 
 \item{...}{Additional arguments passed to \code{\link[plotly]{add_surface}} for customizing the appearance
 of the surface plot (e.g., \code{opacity}, \code{colorscale}, \code{showscale}).}
@@ -22,6 +25,10 @@ Generates a 3D surface plot of 2D conditional predictive samples produced by \co
 \details{
 The function visualizes the posterior predictive mean across a 2D grid of evaluation points for two covariates.
 Interactive plotting is handled via the \pkg{plotly} package. Axis labels are automatically inferred from the object.
+
+For multivariate models, \code{x$mean_pred} has dimensions \code{nsamp x n_eval_points x n_eval_points x M}; the surface shows
+the posterior median of the predictive mean for the response selected by \code{response}, and the z-axis is labelled with that
+response's name. To view several responses, call the function once per response.
 
 Note: The \pkg{plotly} package must be installed to use this function.
 }
@@ -47,6 +54,8 @@ plot(marginal_samps_both)
 
 # Customize surface appearance
 plot(marginal_samps_both, opacity = 0.8, colorscale = "Magma")
+
+# For a shrinkMVGPR/shrinkMVTPR fit, choose the response with e.g. plot(marginal_samps_both, response = 2)
 
 # Customize further via plotly
 p <- plot(marginal_samps_both, opacity = 0.8, colorscale = "Magma")

@@ -214,12 +214,18 @@ plot.shrinkGPR_marg_samples_1D <- function(x, ...) {
 #'
 #' @param x An object of class \code{"shrinkGPR_marg_samples_2D"}, typically returned by
 #' \code{\link{gen_marginal_samples}} when evaluating two covariates.
+#' @param response For multivariate models (\code{shrinkMVGPR}, \code{shrinkMVTPR}), the index of the response to plot,
+#' an integer between 1 and \code{M}. Defaults to 1. Ignored for univariate models.
 #' @param ... Additional arguments passed to \code{\link[plotly]{add_surface}} for customizing the appearance
 #' of the surface plot (e.g., \code{opacity}, \code{colorscale}, \code{showscale}).
 #'
 #' @details
 #' The function visualizes the posterior predictive mean across a 2D grid of evaluation points for two covariates.
 #' Interactive plotting is handled via the \pkg{plotly} package. Axis labels are automatically inferred from the object.
+#'
+#' For multivariate models, \code{x$mean_pred} has dimensions \code{nsamp x n_eval_points x n_eval_points x M}; the surface shows
+#' the posterior median of the predictive mean for the response selected by \code{response}, and the z-axis is labelled with that
+#' response's name. To view several responses, call the function once per response.
 #'
 #' Note: The \pkg{plotly} package must be installed to use this function.
 #'
@@ -250,6 +256,8 @@ plot.shrinkGPR_marg_samples_1D <- function(x, ...) {
 #' # Customize surface appearance
 #' plot(marginal_samps_both, opacity = 0.8, colorscale = "Magma")
 #'
+#' # For a shrinkMVGPR/shrinkMVTPR fit, choose the response with e.g. plot(marginal_samps_both, response = 2)
+#'
 #' # Customize further via plotly
 #' p <- plot(marginal_samps_both, opacity = 0.8, colorscale = "Magma")
 #'
@@ -266,7 +274,7 @@ plot.shrinkGPR_marg_samples_1D <- function(x, ...) {
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
 #' @family plotting functions
 #' @export
-plot.shrinkGPR_marg_samples_2D <- function(x, ...) {
+plot.shrinkGPR_marg_samples_2D <- function(x, response = 1, ...) {
 
   if (!requireNamespace("plotly", quietly = TRUE)) {
     stop("The 'plotly' package is required for this function. Please install it with install.packages('plotly').")
@@ -276,10 +284,22 @@ plot.shrinkGPR_marg_samples_2D <- function(x, ...) {
     stop("x must be a shrinkGPR_marg_samples_2D object.")
   }
 
-  mean_surface <- t(apply(x$mean_pred, c(2, 3), median))
+  M <- attr(x, "M")
+  resp_var <- attr(x, "response")
+  mean_pred <- x$mean_pred
+
+  if (M > 1) {
+    if (length(response) != 1 || !(response %in% seq_len(M))) {
+      stop("The argument 'response' must be a single integer between 1 and ", M, ".")
+    }
+    # Keep the sample dimension even if nsamp = 1
+    mean_pred <- array(mean_pred[, , , response], dim = dim(mean_pred)[1:3])
+    resp_var <- resp_var[-1][response]  # drop "cbind"
+  }
+
+  mean_surface <- t(apply(mean_pred, c(2, 3), median))
 
   to_eval <- attr(x, "to_eval")
-  resp_var <- attr(x, "response")
 
   plotly::plot_ly(
     x = x$grid$grid1,

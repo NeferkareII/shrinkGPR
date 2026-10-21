@@ -35,7 +35,7 @@ the covariates in \code{to_eval}. If omitted, the range is set to the range of t
 \value{
 A list containing posterior predictive summaries over the evaluation grid:
 \itemize{
-\item \code{mean_pred}: A matrix (1D case) or array (2D case) of predicted means for each evaluation point and posterior sample.
+\item \code{mean_pred}: Predicted means for each posterior sample and evaluation point. For univariate models (\code{shrinkGPR}, \code{shrinkTPR}), a matrix of dimensions \code{nsamp x n_eval_points} (1D case) or an array of dimensions \code{nsamp x n_eval_points x n_eval_points} (2D case). For multivariate models (\code{shrinkMVGPR}, \code{shrinkMVTPR}), an array with an additional trailing dimension of length \code{M}, one slice per response.
 \item \code{grid}: The evaluation grid used to generate predictions. A numeric vector (1D) or a named list of two vectors (\code{grid1}, \code{grid2}) for 2D evaluations.
 }
 }

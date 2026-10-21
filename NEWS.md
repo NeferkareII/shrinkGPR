@@ -4,6 +4,7 @@
   - Fixed bug in the implementation of cont_model
   - Fixed bug in the implementation of the U function in log_hyperu
   - Fixed a bug in gen_posterior_samples
+  - Fixed 2D marginal plot mixing responses for multivariate models
 
 
 ## Changes in Version 2.1.0:
