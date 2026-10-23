@@ -5,6 +5,7 @@
   - Fixed bug in the implementation of the U function in log_hyperu
   - Fixed a bug in gen_posterior_samples
   - Fixed 2D marginal plot mixing responses for multivariate models
+  - Corrected the LKJ prior on the correlation matrix of shrinkMVGPR/shrinkMVTPR (missing Jacobian for M > 2) and removed a double diagonal adjustment in predict for shrinkMVGPR.
 
 
 ## Changes in Version 2.1.0:

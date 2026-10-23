@@ -272,10 +272,14 @@ MVGPR_class <- nn_module(
       stop("Likelihood is NaN")
     }
 
+
     diag_LD  <- torch_diagonal(D_chol_zk$L, dim1=2, dim2=3)
 
-    logdet_D <- 2 * torch_sum(torch_log(diag_LD), dim=2)
-    lkj_term <- (self$prior_eta - 1) * logdet_D
+    # LKJ(eta) prior on D, written as a density on its Cholesky factor L
+    # (Stan's lkj_corr_cholesky): sum_k (M - k + 2(eta - 1)) log L_kk.
+    # The (M - k) part is the Jacobian of D = L L'.
+    lkj_w <- torch_tensor(as.numeric(self$M - seq_len(self$M)), device = diag_LD$device)
+    lkj_term <- torch_sum((lkj_w + 2 * (self$prior_eta - 1)) * torch_log(diag_LD), dim = 2)
 
     # Prior on theta
     prior <- self$ltg(theta_zk, self$prior_a, self$prior_c, tau_zk)$sum(dim = 2)$mean() +
@@ -413,19 +417,12 @@ MVGPR_class <- nn_module(
       pred_Omega <- pred_moments$Omega
 
       L_S <- robust_chol(pred_K)
+      # Omega is already built from the diagonal-biased factor, so its
+      # Cholesky factor is used as is
       L_Om <- robust_chol(pred_Omega)
 
-      # Slightly bias diagonal of L_Om away from zero to improve stability of likelihood calculation
-      eps_diag <- 0.03
-      beta <- 10
-      diag <- torch_diagonal(L_Om, dim1=2, dim2=3)
-      diag2 <- eps_diag + nnf_softplus(diag - eps_diag, beta = beta)
-
-      L_Om2 <- L_Om$clone()
-      L_Om2$diagonal(dim1=2, dim2=3)$copy_(diag2)
-
       Z <- torch_randn(c(nsamp, N_new, self$M), device=self$device)
-      pred_samples <- pred_mean + torch_bmm(torch_bmm(L_S, Z), L_Om2$permute(c(1, 3, 2)))
+      pred_samples <- pred_mean + torch_bmm(torch_bmm(L_S, Z), L_Om$permute(c(1, 3, 2)))
 
       return(pred_samples)
     })

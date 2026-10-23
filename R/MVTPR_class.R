@@ -194,8 +194,11 @@ MVTPR_class <- nn_module(
 
     diag_LD  <- torch_diagonal(D_chol_zk$L, dim1=2, dim2=3)
 
-    logdet_D <- 2 * torch_sum(torch_log(diag_LD), dim=2)
-    lkj_term <- (self$prior_eta - 1) * logdet_D
+    # LKJ(eta) prior on D, written as a density on its Cholesky factor L
+    # (Stan's lkj_corr_cholesky): sum_k (M - k + 2(eta - 1)) log L_kk.
+    # The (M - k) part is the Jacobian of D = L L'.
+    lkj_w <- torch_tensor(as.numeric(self$M - seq_len(self$M)), device = diag_LD$device)
+    lkj_term <- torch_sum((lkj_w + 2 * (self$prior_eta - 1)) * torch_log(diag_LD), dim = 2)
 
     # Prior on theta
     prior <- self$ltg(theta_zk, self$prior_a, self$prior_c, tau_zk)$sum(dim = 2)$mean() +
