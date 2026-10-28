@@ -214,8 +214,8 @@ MVTPR_class <- nn_module(
       # Prior on nu
       self$ldg(nu_raw, self$nu_alpha, self$nu_beta)$mean()
 
-    diag_biasing_logJ <- torch_sum(torch_log(torch_sigmoid(10.0 * (diag - eps_diag))), dim = 2)
-    var_dens <- log_det_J$mean() + D_chol_zk$logJ$mean() + log_det_S$mean() + diag_biasing_logJ$mean()
+    # No Jacobian for the diagonal biasing of L_Om: it only enters the likelihood, priors are on S and D
+    var_dens <- log_det_J$mean() + D_chol_zk$logJ$mean() + log_det_S$mean()
 
     # Compute ELBO
     elbo <- likelihood + prior + var_dens

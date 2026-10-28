@@ -295,9 +295,11 @@ TPR_class <- nn_module(
       r <- torch_tensor(1/rgamma(nsamp, as.matrix(pred_moments$pred_nu) / 2, 1 / 2),
                         device = self$device)$view(c(nsamp, 1))
 
-      pred_samples <- pred_mean + sqrt(r * (pred_nu$view(c(nsamp, 1)) - 2)) * torch_bmm(pred_scale_chol, eps)$squeeze()
+      # Explicit reshapes, as squeeze() in calc_pred_moments drops dimensions when nsamp or N_new is 1
+      pred_samples <- pred_mean$view(c(nsamp, N_new)) +
+        sqrt(r * (pred_nu$view(c(nsamp, 1)) - 2)) * torch_bmm(pred_scale_chol, eps)$view(c(nsamp, N_new))
 
-      return(pred_samples$squeeze())
+      return(pred_samples)
     })
 
   },
@@ -334,12 +336,6 @@ TPR_class <- nn_module(
       return(res)
     })
 
-  },
-
-  # Method to calculate LPDS
-  LPDS = function(x_new, y_new, nsamp, x_mean_new = NULL) {
-    res <- self$eval_pred_dens(x_new, y_new, nsamp, x_mean_new, log = TRUE)
-    return(res)
   }
 
 )
