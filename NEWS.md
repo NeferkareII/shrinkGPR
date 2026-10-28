@@ -6,6 +6,10 @@
   - Fixed a bug in gen_posterior_samples
   - Fixed 2D marginal plot mixing responses for multivariate models
   - Corrected the LKJ prior on the correlation matrix of shrinkMVGPR/shrinkMVTPR (missing Jacobian for M > 2) and removed a double diagonal adjustment in predict for shrinkMVGPR.
+  - Removed a spurious Jacobian term for the diagonal stabilization of the output covariance from the ELBO of shrinkMVGPR/shrinkMVTPR, which penalized small output scales. Fitted results will differ from previous versions.
+  - Fixed predict for shrinkTPR returning an nsamp x nsamp matrix when predicting at a single point
+  - simMVGPR now rescales Omega so that the product of its marginal standard deviations is 1, making it directly comparable to shrinkMVGPR estimates. Omega is now also documented in the returned true values.
+  - Documentation fixes: output scale is 1/tau, n_latent is the number of Monte Carlo samples, identification of the output scales in shrinkMVGPR/shrinkMVTPR, matrix-variate t is not vectorizable, Sylvester flow formula, Matérn distance jitter. Added reference to Chen, Wang & Gorban (2020).
 
 
 ## Changes in Version 2.1.0:

@@ -23,7 +23,7 @@
 #' @param kernel_func function specifying the covariance kernel. The default is \code{\link{kernel_se}}, a squared exponential kernel.
 #' For guidance on how to provide a custom kernel function, see Details.
 #' @param n_layers positive integer specifying the number of flow layers in the normalizing flow. The default is 10.
-#' @param n_latent positive integer specifying the dimensionality of the latent space for the normalizing flow. The default is 10.
+#' @param n_latent positive integer specifying the number of Monte Carlo samples drawn from the normalizing flow at each iteration to estimate the ELBO. The default is 10.
 #' @param flow_func function specifying the normalizing flow transformation. The default is \code{\link{sylvester}}.
 #' For guidance on how to provide a custom flow function, see Details.
 #' @param flow_args \emph{optional} named list containing arguments for the flow function. If not provided, default arguments are used.
@@ -55,7 +55,7 @@
 #' likelihood for the observations is \eqn{Y \sim t_N\!\left(\nu,\, \mu(x_1, \ldots, x_N),\, K(\theta, \tau) + \sigma^2 I\right)}.
 #' The default squared exponential kernel is
 #' \deqn{k(x, x';\, \theta, \tau) = \frac{1}{\tau} \exp\!\left(-\frac{1}{2} \sum_{j=1}^d \theta_j (x_j - x'_j)^2\right),}
-#' where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{\tau > 0} is the output scale.
+#' where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{1/\tau} is the output scale, i.e. \eqn{\tau > 0} is the inverse output scale, which doubles as the global shrinkage parameter of the triple-gamma prior.
 #' Users can specify custom kernels by following the guidelines below, or use one of the other provided kernel functions in
 #' \code{\link{kernel_functions}}.
 #'

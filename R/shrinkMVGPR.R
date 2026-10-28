@@ -21,7 +21,7 @@
 #' @param kernel_func function specifying the covariance kernel. The default is \code{\link{kernel_se}}, a squared exponential kernel.
 #' For guidance on how to provide a custom kernel function, see Details.
 #' @param n_layers positive integer specifying the number of flow layers in the normalizing flow. The default is 10.
-#' @param n_latent positive integer specifying the dimensionality of the latent space for the normalizing flow. The default is 10.
+#' @param n_latent positive integer specifying the number of Monte Carlo samples drawn from the normalizing flow at each iteration to estimate the ELBO. The default is 10.
 #' @param flow_func function specifying the normalizing flow transformation. The default is \code{\link{sylvester}}.
 #' For guidance on how to provide a custom flow function, see Details.
 #' @param flow_args \emph{optional} named list containing arguments for the flow function. If not provided, default arguments are used.
@@ -56,7 +56,7 @@
 #' The product of the diagonal elements of \eqn{S} is constrained to equal 1 to ensure identifiability.
 #' The default squared exponential kernel is
 #' \deqn{k(x, x';\, \theta, \tau) = \frac{1}{\tau} \exp\!\left(-\frac{1}{2} \sum_{j=1}^d \theta_j (x_j - x'_j)^2\right),}
-#' where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{\tau > 0} is the output scale.
+#' where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{1/\tau} is the output scale, i.e. \eqn{\tau > 0} is the inverse output scale, which doubles as the global shrinkage parameter of the triple-gamma prior.
 #' Users can specify custom kernels by following the guidelines below, or use one of the other provided kernel functions in \code{\link{kernel_functions}}.
 #'
 #' \strong{Priors}
@@ -65,10 +65,14 @@
 #' \deqn{\tau \sim F(2c, 2a),}
 #' \deqn{\sigma^2 \sim \mathrm{Exp}(\sigma^2_\mathrm{rate}),}
 #' \deqn{D \sim \mathrm{LKJ}(\eta),}
-#' \deqn{s_m \mid \tau_\Omega \sim \mathrm{TG}(a_\Omega, c_\Omega, \tau_\Omega), \quad m = 1, \ldots, M,}
+#' \deqn{p(s_1, \ldots, s_{M-1} \mid \tau_\Omega) \propto \prod_{m=1}^{M} \mathrm{TG}(s_m \mid a_\Omega, c_\Omega, \tau_\Omega), \quad s_M = \prod_{m=1}^{M-1} s_m^{-1},}
 #' \deqn{\tau_\Omega \sim F(2c_\Omega, 2a_\Omega).}
 #' The LKJ(\eqn{\eta}) prior on the correlation matrix \eqn{D} is uniform over correlations when \eqn{\eta = 1}
 #' and concentrates near the identity as \eqn{\eta} increases.
+#' Due to the identifiability constraint, only \eqn{s_1, \ldots, s_{M-1}} are free parameters, while the triple-gamma
+#' density is evaluated at all \eqn{M} scales, including the implied \eqn{s_M}. For numerical stability,
+#' \eqn{\log s_m} is smoothly bounded to \eqn{(-4, 4)} for \eqn{m < M}, and the diagonal of the Cholesky factor of
+#' \eqn{\Omega} is smoothly bounded below by 0.03 in the likelihood.
 #'
 #' \strong{Inference}
 #'
@@ -125,6 +129,9 @@
 #'   # y_new is an array of shape nsamp x N_new x M
 #'   }
 #' }
+#' @references
+#' Chen, Z., Wang, B., & Gorban, A. N. (2020). Multivariate Gaussian and Student-t process regression for multi-output prediction.
+#' \emph{Neural Computing and Applications}, 32, 3005-3028.
 #' @export
 #' @author Peter Knaus \email{peter.knaus@@wu.ac.at}
 shrinkMVGPR <- function(formula,

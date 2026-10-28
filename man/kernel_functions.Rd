@@ -48,6 +48,10 @@ It assumes smooth underlying functions.
 \item \code{kernel_matern_52}: Matérn kernel with smoothness parameter \eqn{\nu = 5/2}.
 }
 
+For numerical stability (the Matérn kernels are not differentiable in the distance at zero), the Matérn kernels
+evaluate the distance as \eqn{\sqrt{r^2 + 10^{-4}}} instead of \eqn{r}. Consequently, \eqn{k(x, x)} is slightly smaller
+than \eqn{1/\tau}.
+
 The \code{sqdist} helper function is used internally by these kernels to compute squared distances between data points.
 
 Note that these functions perform no input checks, as to ensure higher performance.
