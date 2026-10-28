@@ -30,6 +30,10 @@ test_shrinkTPR <- function(args, eval_points = c(-2, 0, 2), log_pred = FALSE) {
   expect_type(preds, "double")
   expect_equal(dim(preds), c(100, nrow(test)))  # Default nsamp for prediction functions
 
+  # Test prediction at a single point (previously broadcast to nsamp x nsamp)
+  preds_1 <- predict(res, newdata = test[1, ])
+  expect_equal(dim(preds_1), c(100, 1))
+
   # Test LPDS
   lpds <- LPDS(res, data_test = test[1, ])
   expect_type(lpds, "double")

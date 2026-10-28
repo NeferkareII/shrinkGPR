@@ -51,7 +51,7 @@ For guidance on how to provide a custom kernel function, see Details.}
 
 \item{n_layers}{positive integer specifying the number of flow layers in the normalizing flow. The default is 10.}
 
-\item{n_latent}{positive integer specifying the dimensionality of the latent space for the normalizing flow. The default is 10.}
+\item{n_latent}{positive integer specifying the number of Monte Carlo samples drawn from the normalizing flow at each iteration to estimate the ELBO. The default is 10.}
 
 \item{flow_func}{function specifying the normalizing flow transformation. The default is \code{\link{sylvester}}.
 For guidance on how to provide a custom flow function, see Details.}
@@ -96,7 +96,7 @@ Given \eqn{N} observations with \eqn{d}-dimensional covariates \eqn{x_i}, the mo
 \deqn{f \sim \mathcal{GP}(\mu(\cdot),\; k(\cdot, \cdot\,;\, \theta, \tau)).}
 The default squared exponential kernel is
 \deqn{k(x, x';\, \theta, \tau) = \frac{1}{\tau} \exp\!\left(-\frac{1}{2} \sum_{j=1}^d \theta_j (x_j - x'_j)^2\right),}
-where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{\tau > 0} is the output scale.
+where \eqn{\theta_j \ge 0} are inverse squared length-scales and \eqn{1/\tau} is the output scale, i.e. \eqn{\tau > 0} is the inverse output scale, which doubles as the global shrinkage parameter of the triple-gamma prior.
 Users can specify custom kernels by following the guidelines below, or use one of the other provided kernel functions in \code{\link{kernel_functions}}.
 If \code{formula_mean} is provided, the GP mean becomes \eqn{x_{\mu,i}^\top \beta} instead of zero.
 

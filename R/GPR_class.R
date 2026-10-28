@@ -299,9 +299,10 @@ GPR_class <- nn_module(
       pred_var_chol <- robust_chol(pred_var, upper = FALSE)
       eps <- torch_randn(nsamp, N_new, 1, device = self$device)
 
-      pred_samples <- pred_mean$unsqueeze(1) + torch_bmm(pred_var_chol, eps)$squeeze()
+      # Explicit reshapes, as squeeze() in calc_pred_moments drops dimensions when nsamp or N_new is 1
+      pred_samples <- pred_mean$view(c(nsamp, N_new)) + torch_bmm(pred_var_chol, eps)$view(c(nsamp, N_new))
 
-      return(pred_samples$squeeze())
+      return(pred_samples)
     })
 
   },
@@ -327,12 +328,6 @@ GPR_class <- nn_module(
       return(res)
     })
 
-  },
-
-  # Method to calculate LPDS
-  LPDS = function(x_new, y_new, nsamp, x_mean_new = NULL) {
-    res <- self$eval_pred_dens(x_new, y_new, nsamp, x_mean_new, log = TRUE)
-    return(res)
   }
 
 )

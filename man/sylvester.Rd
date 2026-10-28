@@ -28,7 +28,7 @@ to a more complex target distribution, allowing for flexible posterior approxima
 \details{
 The Sylvester flow uses two triangular matrices (\code{R1} and \code{R2}) and Householder reflections to construct invertible transformations.
 The transformation is parameterized as follows:
-\deqn{z = Q R_1 h(Q^T R_2 zk + b) + zk,}
+\deqn{z = Q R_1 h(R_2 Q^T zk + b) + zk,}
 where:
 \itemize{
 \item \code{Q} is an orthogonal matrix obtained via Householder reflections.
