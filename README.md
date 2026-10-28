@@ -83,8 +83,9 @@ Plot the model’s loss to monitor convergence:
 plot(model$loss_stor, type = "l")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- --> \####
-Checking on Inverse Lengthscale Parameters
+![](README_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+
+#### Checking on Inverse Lengthscale Parameters
 
 A quick check of covariate relevance can be performed by plotting the
 inverse lengthscale parameters $\theta_1, \dots, \theta_d$. This is what

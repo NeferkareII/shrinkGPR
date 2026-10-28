@@ -71,6 +71,7 @@ Plot the model's loss to monitor convergence:
 ```{r}
 plot(model$loss_stor, type = "l")
 ```
+
 #### Checking on Inverse Lengthscale Parameters
 
 A quick check of covariate relevance can be performed by plotting the inverse lengthscale parameters $\theta_1, \dots, \theta_d$. This is what the `plot` method does when called on a `shrinkGPR` or `shrinkTPR` object:
